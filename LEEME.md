@@ -47,6 +47,11 @@ La versión completa (con asistente de recetas, ubicación, chat, reseñas y avi
 
 ## Conseguir el APK (el instalador para Android)
 
+**El APK de prueba del Avance 1 ya está armado.** Se descarga directo desde el celular en
+https://github.com/perezmigueljosedavid-eng/MercaBoot/releases/download/avance1-apk/Mercaboot-avance1.apk
+(página del Release: https://github.com/perezmigueljosedavid-eng/MercaBoot/releases/tag/avance1-apk). Para instalarlo, sigue «Instalar el APK en un celular Android» (más abajo).
+Lo que sigue explica cómo armarlo otra vez o armar uno propio.
+
 Armar el APK necesita las herramientas de Android, así que se hace «en la nube». Hay dos formas; con **una** basta.
 
 **Forma 1 · Expo (EAS)** — la más directa. Necesitas una cuenta gratis en [expo.dev](https://expo.dev) y Node.js. En una terminal, dentro de esta carpeta:
@@ -61,7 +66,7 @@ La primera vez pregunta si quieres crear el proyecto en tu cuenta de Expo: respo
 Al terminar (de 15 a 30 minutos, según la fila de espera) muestra un **enlace y un código QR** para descargar el `.apk` desde el celular.
 
 **Forma 2 · GitHub Actions.** Crea un repositorio en GitHub y sube **todos** los archivos de esta carpeta (incluida la carpeta oculta `.github`).
-GitHub empieza a compilar solo (pestaña **Actions** → **Construir APK**; tarda unos 30–40 minutos) y deja `Mercaboot-avance1.apk` en **Releases** del repositorio.
+GitHub empieza a compilar solo (pestaña **Actions** → **Construir APK**; tarda unos 15–25 minutos) y deja `Mercaboot-avance1.apk` en **Releases** del repositorio.
 Para compilar otra vez: **Actions** → **Construir APK** → **Run workflow**. Si el repositorio es privado, para descargar el APK en el celular tendrás que iniciar sesión en GitHub.
 Con git, en la terminal:
 
