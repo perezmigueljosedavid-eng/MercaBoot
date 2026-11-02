@@ -39,7 +39,9 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - uses: android-actions/setup-android@v3
+      # El servidor de GitHub ya trae el SDK de Android; solo hay que aceptar las licencias.
+      - name: Aceptar las licencias de Android
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
       - name: Instalar dependencias
         id: instalar
