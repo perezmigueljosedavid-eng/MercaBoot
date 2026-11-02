@@ -1,0 +1,136 @@
+name: Construir APK
+
+# Arma el APK de Android en los servidores de GitHub (no hace falta Android Studio).
+# Se ejecuta solo al subir cambios que incluyan el archivo «disparador-apk.txt» (la primera vez que subes el proyecto),
+# o a mano: pestaña Actions → Construir APK → Run workflow.
+# Resultado: Releases → «Mercaboot · Avance 1 (APK de prueba)». También queda como «artifact» de la corrida.
+on:
+  workflow_dispatch:
+  push:
+    paths: [disparador-apk.txt]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      CI: '1'
+      EXPO_NO_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Instalar dependencias
+        id: instalar
+        run: npm install --no-audit --no-fund 2>&1 | tee -a build.log
+
+      - name: Crear los íconos (carpeta assets)
+        id: iconos
+        run: |
+          mkdir -p "$RUNNER_TEMP/iconos"
+          (cd "$RUNNER_TEMP/iconos" && npm init -y >/dev/null && npm i sharp --no-audit --no-fund 2>&1 | tail -3)
+          NODE_PATH="$RUNNER_TEMP/iconos/node_modules" node scripts/hacer-iconos.cjs 2>&1 | tee -a build.log
+
+      - name: Revisar tipos (TypeScript)
+        id: tipos
+        continue-on-error: true
+        run: npx tsc --noEmit 2>&1 | tee -a build.log
+
+      - name: Generar el proyecto Android
+        id: prebuild
+        run: npx expo prebuild --platform android --no-install 2>&1 | tee -a build.log
+
+      - name: Dar más memoria a Gradle
+        run: sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g/' android/gradle.properties
+
+      - name: Compilar el APK
+        id: gradle
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon --stacktrace -PreactNativeArchitectures=armeabi-v7a,arm64-v8a 2>&1 | tee -a ../build.log
+
+      - name: Renombrar el APK
+        id: apk
+        run: cp android/app/build/outputs/apk/release/app-release.apk Mercaboot-avance1.apk
+
+      - name: Revisar el APK (firma, paquete y permisos)
+        continue-on-error: true
+        run: |
+          BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          {
+            ls -l Mercaboot-avance1.apk
+            echo "== apksigner =="
+            "$BT/apksigner" verify --verbose --print-certs Mercaboot-avance1.apk | head -12
+            echo "== aapt2 =="
+            "$BT/aapt2" dump badging Mercaboot-avance1.apk | grep -E "^package|sdkVersion|targetSdkVersion|uses-permission|application-label:|native-code" || true
+          } 2>&1 | tee info-apk.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mercaboot-avance1-apk
+          path: Mercaboot-avance1.apk
+
+      - name: Publicar el APK en Releases
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete avance1-apk --cleanup-tag --yes || true
+          gh release create avance1-apk Mercaboot-avance1.apk \
+            --target "${{ github.sha }}" \
+            --title "Mercaboot · Avance 1 (APK de prueba)" \
+            --notes "APK de prueba del Avance 1 (inicios de sesión y la interfaz de cliente y de comerciante). Descárgalo desde un celular Android y ábrelo para instalar. Si Android avisa que bloquea la instalación, permite instalar apps desde esta fuente (Configuración → Instalar apps desconocidas). Si aparece Play Protect, toca Instalar de todos modos. Corrida #${{ github.run_number }}, commit ${{ github.sha }}."
+
+      - name: Guardar cómo terminó la corrida (rama «build-log»)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULTADO: ${{ job.status }}
+          P_INSTALAR: ${{ steps.instalar.outcome }}
+          P_ICONOS: ${{ steps.iconos.outcome }}
+          P_TIPOS: ${{ steps.tipos.outcome }}
+          P_PREBUILD: ${{ steps.prebuild.outcome }}
+          P_GRADLE: ${{ steps.gradle.outcome }}
+          P_APK: ${{ steps.apk.outcome }}
+          P_RELEASE: ${{ steps.release.outcome }}
+        run: |
+          d="$(mktemp -d)"
+          {
+            echo "resultado: $RESULTADO"
+            echo "corrida: ${{ github.run_number }}"
+            echo "commit: ${{ github.sha }}"
+            date -u +"fecha: %Y-%m-%dT%H:%M:%SZ"
+            echo "pasos: instalar=$P_INSTALAR iconos=$P_ICONOS tipos=$P_TIPOS prebuild=$P_PREBUILD gradle=$P_GRADLE apk=$P_APK release=$P_RELEASE"
+          } > "$d/estado.txt"
+          if [ -f info-apk.txt ]; then cp info-apk.txt "$d/info-apk.txt"; fi
+          if [ -f build.log ]; then
+            tail -n 300 build.log > "$d/build-cola.txt"
+            grep -n -B2 -A14 -E "FAILURE: Build failed|What went wrong|^e: |error TS|npm error|ERR!|Error:" build.log | head -n 400 > "$d/errores.txt" || true
+          fi
+          cd "$d"
+          git init -q -b build-log
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Corrida #${{ github.run_number }}: $RESULTADO"
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:refs/heads/build-log
