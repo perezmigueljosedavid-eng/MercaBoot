@@ -8,13 +8,19 @@ import { useStore } from '../store';
 
 type TabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>['tabBar']>>[0];
 
-export type TabItem = { name: string; label: string; icon: IconName; /** Muestra un punto cuando hay chats sin leer. */ chats?: boolean };
+export type TabItem = {
+  name: string;
+  label: string;
+  icon: IconName;
+  /** Número rojo sobre el ícono: chats sin leer, o pedidos (del cliente: activos; del comerciante: nuevos). */
+  insignia?: 'chats' | 'pedidos';
+};
 
 /** Barra inferior con el mismo aspecto del diseño (ícono + etiqueta de 11px). */
 export function makeTabBar(items: TabItem[]) {
   return function MercabootTabBar({ state, navigateToTab, insets }: TabBarProps) {
     const [teclado, setTeclado] = useState(false);
-    const { chatsSinLeer } = useStore();
+    const { chatsSinLeer, pedidosPendientes } = useStore();
     useEffect(() => {
       const mostrar = Keyboard.addListener(
         Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
@@ -49,6 +55,8 @@ export function makeTabBar(items: TabItem[]) {
           if (!item) return null;
           const activo = state.index === i;
           const color = activo ? C.green : C.muted;
+          const cuantos = item.insignia === 'chats' ? chatsSinLeer : item.insignia === 'pedidos' ? pedidosPendientes : 0;
+          const detalle = item.insignia === 'chats' ? (cuantos === 1 ? 'chat sin leer' : 'chats sin leer') : cuantos === 1 ? 'pedido' : 'pedidos';
           return (
             <Pressable
               key={route.key}
@@ -60,9 +68,9 @@ export function makeTabBar(items: TabItem[]) {
             >
               <View>
                 <Icon name={item.icon} size={22} color={color} />
-                {item.chats && chatsSinLeer > 0 ? (
+                {cuantos > 0 ? (
                   <View
-                    accessibilityLabel={`${chatsSinLeer} ${chatsSinLeer === 1 ? 'chat sin leer' : 'chats sin leer'}`}
+                    accessibilityLabel={`${cuantos} ${detalle}`}
                     style={{
                       position: 'absolute',
                       top: -4,
@@ -77,7 +85,7 @@ export function makeTabBar(items: TabItem[]) {
                     }}
                   >
                     <T size={10} weight={800} color={C.white}>
-                      {chatsSinLeer > 9 ? '9+' : String(chatsSinLeer)}
+                      {cuantos > 9 ? '9+' : String(cuantos)}
                     </T>
                   </View>
                 ) : null}

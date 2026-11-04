@@ -3,7 +3,8 @@ name: Construir APK
 # Arma el APK de Android en los servidores de GitHub (no hace falta Android Studio).
 # Se ejecuta solo al subir cambios que incluyan el archivo «disparador-apk.txt», o a mano:
 # pestaña Actions → Construir APK → Run workflow.
-# Resultado: Releases → «Mercaboot · Avance 2 (APK de prueba)». También queda como «artifact» de la corrida.
+# Resultado: Releases → «Mercaboot · Avance 2.1 (carrito y pedidos)». También queda como «artifact» de la corrida.
+# (El Release del Avance 2.0, «avance2-apk», se deja intacto.)
 #
 # Antes de compilar se revisa src/config.ts (scripts/revisar-config.cjs):
 #   · con los datos de ejemplo (REEMPLAZA-ESTO) el APK sale de PRUEBA, sin base de datos, y NO se publica en Releases;
@@ -81,24 +82,24 @@ jobs:
 
       - name: Renombrar el APK
         id: apk
-        run: cp android/app/build/outputs/apk/release/app-release.apk Mercaboot-avance2.apk
+        run: cp android/app/build/outputs/apk/release/app-release.apk Mercaboot-avance2-1.apk
 
       - name: Revisar el APK (firma, paquete y permisos)
         continue-on-error: true
         run: |
           BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
           {
-            ls -l Mercaboot-avance2.apk
+            ls -l Mercaboot-avance2-1.apk
             echo "== apksigner =="
-            "$BT/apksigner" verify --verbose --print-certs Mercaboot-avance2.apk | head -12
+            "$BT/apksigner" verify --verbose --print-certs Mercaboot-avance2-1.apk | head -12
             echo "== aapt2 =="
-            "$BT/aapt2" dump badging Mercaboot-avance2.apk | grep -E "^package|sdkVersion|targetSdkVersion|uses-permission|application-label:|native-code" || true
+            "$BT/aapt2" dump badging Mercaboot-avance2-1.apk | grep -E "^package|sdkVersion|targetSdkVersion|uses-permission|application-label:|native-code" || true
           } 2>&1 | tee info-apk.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.nube.outputs.lista == 'true' && 'Mercaboot-avance2-apk' || 'Mercaboot-avance2-PRUEBA-sin-base-de-datos-apk' }}
-          path: Mercaboot-avance2.apk
+          name: ${{ steps.nube.outputs.lista == 'true' && 'Mercaboot-avance2-1-apk' || 'Mercaboot-avance2-1-PRUEBA-sin-base-de-datos-apk' }}
+          path: Mercaboot-avance2-1.apk
 
       - name: Publicar el APK en Releases
         id: release
@@ -106,11 +107,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete avance2-apk --cleanup-tag --yes || true
-          gh release create avance2-apk Mercaboot-avance2.apk \
+          gh release delete avance2-1-apk --cleanup-tag --yes || true
+          gh release create avance2-1-apk Mercaboot-avance2-1.apk \
             --target "${{ github.sha }}" \
-            --title "Mercaboot · Avance 2 (APK de prueba)" \
-            --notes "APK de prueba del Avance 2: base de datos en la nube con cambios en tiempo real (lo que publica un comerciante lo ve el cliente al instante y al revés), ubicación y distancias, y chat entre cliente y comerciante. Descárgalo desde un celular Android y ábrelo para instalar; necesita internet. Si Android avisa que bloquea la instalación, permite instalar apps desde esta fuente (Configuración → Instalar apps desconocidas). Si aparece Play Protect, toca Instalar de todos modos. Corrida #${{ github.run_number }}, commit ${{ github.sha }}."
+            --title "Mercaboot · Avance 2.1 (carrito y pedidos)" \
+            --notes "APK de prueba del Avance 2.1: carrito de compras y pedidos apartados con tiempo límite (si el cliente no llega, el pedido se libera solo y el producto vuelve a estar a la venta), pago en persona o por transferencia, chat ligado a cada pedido y clientes frecuentes que elige el comerciante (descuento, regalo o cupón). Sigue con la base de datos en la nube en tiempo real, ubicación y chat. Descárgalo desde un celular Android y ábrelo para instalar; necesita internet. Si ya tenías el Avance 2, instálalo encima; si Android no lo permite, desinstala el anterior primero (tus datos están en la nube, no en el teléfono). Si Android avisa que bloquea la instalación, permite instalar apps desde esta fuente (Configuración → Instalar apps desconocidas). Si aparece Play Protect, toca Instalar de todos modos. Corrida #${{ github.run_number }}, commit ${{ github.sha }}."
 
       - name: Guardar cómo terminó la corrida (rama «build-log»)
         if: always()
@@ -130,7 +131,7 @@ jobs:
           d="$(mktemp -d)"
           {
             echo "resultado: $RESULTADO"
-            echo "avance: 2"
+            echo "avance: 2.1"
             echo "corrida: ${{ github.run_number }}"
             echo "commit: ${{ github.sha }}"
             echo "rama: ${{ github.ref_name }}"

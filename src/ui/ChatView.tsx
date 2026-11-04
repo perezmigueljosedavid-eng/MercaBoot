@@ -1,14 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, ScrollViewInstance, TextInput, View } from 'react-native';
+import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RESPUESTAS_RAPIDAS_CLIENTE, RESPUESTAS_RAPIDAS_COMERCIANTE } from '../data/contenido';
 import type { Mensaje } from '../data/tipos';
 import { abrirMapas } from '../lib/geo';
+import { dinero, esActivo, etiquetaEstado } from '../lib/pedidos';
 import { sinLeer, useStore } from '../store';
 import { fechaCorta } from './bits';
 import { Icon } from './Icon';
-import { BackBtn, Btn, Chip, Screen } from './kit';
+import { BackBtn, Btn, Card, Chip, Screen } from './kit';
 import { Logo } from './Logo';
+import { Contador, EstadoTag } from './pedidos';
 import { T } from './T';
 import { C, FONT } from './theme';
 
@@ -57,6 +60,57 @@ function Burbuja({ m, mio }: { m: Mensaje; mio: boolean }) {
   );
 }
 
+/** Un aviso del sistema dentro del chat: un pedido cambió de estado, o el negocio te nombró cliente frecuente. */
+function AvisoSistema({ m }: { m: Mensaje }) {
+  const pedidoId = m.pedidoId;
+  return (
+    <Pressable
+      accessibilityRole={pedidoId ? 'button' : 'text'}
+      accessibilityLabel={m.texto}
+      disabled={!pedidoId}
+      onPress={() => pedidoId && router.push(`/pedido/${pedidoId}`)}
+      style={{ alignSelf: 'center', maxWidth: '92%', gap: 2, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 14, backgroundColor: C.greenTint }}
+    >
+      <T size={13} weight={600} lh={1.4} color={C.greenDark} style={{ textAlign: 'center' }}>
+        {m.texto}
+      </T>
+      <T size={10} color={C.muted} style={{ textAlign: 'center' }}>
+        {pedidoId ? `Toca para ver el pedido · ${hora(m.creado)}` : hora(m.creado)}
+      </T>
+    </Pressable>
+  );
+}
+
+/** La tarjeta que queda en el chat cuando alguien aparta un pedido; muestra cómo va en este momento. */
+function TarjetaPedido({ m, mio }: { m: Mensaje; mio: boolean }) {
+  const { s } = useStore();
+  const p = m.pedidoId ? s.pedidos.find((x) => x.id === m.pedidoId) : undefined;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={m.texto}
+      disabled={!p}
+      onPress={() => p && router.push(`/pedido/${p.id}`)}
+      style={{ alignSelf: mio ? 'flex-end' : 'flex-start', width: '86%' }}
+    >
+      <Card r={16} style={{ gap: 8, padding: 14, borderColor: C.green }}>
+        <T size={15} weight={700} lh={1.35}>
+          {m.texto}
+        </T>
+        {p ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+            <EstadoTag p={p} />
+            <Contador p={p} compacto />
+          </View>
+        ) : null}
+        <T size={13} weight={700} color={C.green}>
+          {p ? 'Ver pedido' : 'Pedido'} · {hora(m.creado)}
+        </T>
+      </Card>
+    </Pressable>
+  );
+}
+
 /**
  * Conversación entre cliente y negocio, en vivo: lo que escribe uno aparece al instante en el teléfono del otro.
  * modo "cliente": id = id del negocio · modo "comerciante": id = id de la conversación.
@@ -99,6 +153,12 @@ export function ChatView({ modo, id, showBack }: { modo: 'cliente' | 'comerciant
 
   const nombre = modo === 'cliente' ? negocio.nombre : (conv?.clienteNombre ?? 'Cliente');
   const msgs = convId ? mensajesDe(convId) : [];
+  // Pedidos que este cliente tiene en este negocio y todavía no terminan.
+  const clienteId = modo === 'cliente' ? cuenta.id : conv?.clienteId;
+  const activos = clienteId
+    ? s.pedidos.filter((p) => p.negocioId === negocio.id && p.clienteId === clienteId && esActivo(p)).sort((a, b) => b.creado - a.creado)
+    : [];
+  const trato = clienteId ? s.frecuentes.find((f) => f.negocioId === negocio.id && f.clienteId === clienteId) : undefined;
   const rapidas = modo === 'cliente' ? RESPUESTAS_RAPIDAS_CLIENTE : RESPUESTAS_RAPIDAS_COMERCIANTE;
   const sinCuentaNegocio = modo === 'cliente' && !negocio.duenoId;
   const esMiNegocio = modo === 'cliente' && negocio.duenoId === cuenta.id;
@@ -140,10 +200,43 @@ export function ChatView({ modo, id, showBack }: { modo: 'cliente' | 'comerciant
           {modo === 'cliente' && !sinCuentaNegocio ? (
             <T size={12} weight={600} color={negocio.abierto ? C.green : C.muted}>
               {negocio.abierto ? 'Abierto ahora' : 'Cerrado'}
+              {trato ? ` · ⭐ Cliente frecuente${trato.descuentoPct > 0 ? ` ${trato.descuentoPct}%` : ''}` : ''}
             </T>
           ) : null}
         </View>
+        {modo === 'comerciante' && conv ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Cliente frecuente"
+            onPress={() => router.push({ pathname: '/clientes', params: { cliente: conv.clienteId } })}
+            style={{ height: 36, paddingHorizontal: 12, borderRadius: 18, justifyContent: 'center', backgroundColor: trato ? C.amberTint : C.grey }}
+          >
+            <T size={12} weight={700} color={trato ? C.amberText : C.greyText}>
+              {trato ? '⭐ Frecuente' : '☆ Frecuente'}
+            </T>
+          </Pressable>
+        ) : null}
       </View>
+
+      {activos.length > 0 ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={activos.length === 1 ? `Ver el pedido ${activos[0].codigo}` : `Ver ${activos.length} pedidos activos`}
+          onPress={() => router.push(`/pedido/${activos[0].id}`)}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 16, backgroundColor: C.greenTint, borderBottomWidth: 1, borderBottomColor: C.line }}
+        >
+          <Icon name="bagCheck" size={20} color={C.greenDark} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <T size={13} weight={700} color={C.greenDark} numberOfLines={1}>
+              {activos.length === 1
+                ? `Pedido ${activos[0].codigo} · ${etiquetaEstado(activos[0]).label} · ${dinero(activos[0].total)}`
+                : `${activos.length} pedidos activos`}
+            </T>
+            <Contador p={activos[0]} compacto />
+          </View>
+          <Icon name="next" size={16} color={C.greenDark} />
+        </Pressable>
+      ) : null}
 
       <ScrollView
         ref={scroll}
@@ -173,7 +266,13 @@ export function ChatView({ modo, id, showBack }: { modo: 'cliente' | 'comerciant
                   {etiquetaDia(m.creado)}
                 </T>
               ) : null}
-              <Burbuja m={m} mio={m.autorId === cuenta.id} />
+              {m.tipo === 'aviso' ? (
+                <AvisoSistema m={m} />
+              ) : m.tipo === 'pedido' ? (
+                <TarjetaPedido m={m} mio={m.autorId === cuenta.id} />
+              ) : (
+                <Burbuja m={m} mio={m.autorId === cuenta.id} />
+              )}
             </React.Fragment>
           );
         })}

@@ -124,6 +124,7 @@ export default function PerfilComerciante() {
       </Card>
 
       <Group r={18}>
+        <Fila texto="Clientes frecuentes" onPress={() => router.push('/clientes')} />
         <Fila texto="Así ven mi negocio los clientes" onPress={() => router.push(`/negocio/${negocio.id}`)} />
         <Fila texto="Ayuda" onPress={() => router.push('/ayuda')} />
       </Group>

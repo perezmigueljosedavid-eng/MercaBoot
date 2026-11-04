@@ -97,7 +97,7 @@ export default function HomeCliente() {
                 : 'Aún no hay negocios en esta categoría.'}
           </T>
         ) : (
-          negocios.map((d) => <NegocioCard key={d.n.id} d={d} frecuente={favoritos.includes(d.n.id)} />)
+          negocios.map((d) => <NegocioCard key={d.n.id} d={d} favorito={favoritos.includes(d.n.id)} />)
         )}
       </View>
     </Screen>

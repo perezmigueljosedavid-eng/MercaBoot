@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { nombreCategoria } from '../../data/contenido';
+import { cantidadTexto } from '../../lib/pedidos';
 import { norm } from '../../lib/texto';
 import { useStore } from '../../store';
 import { haceCuanto, textoPrecio } from '../../ui/bits';
@@ -103,6 +104,12 @@ export default function MisProductos() {
                   {textoPrecio(p.precio, p.unidad)}
                   {p.porEncargo ? ' · por encargo' : ''}
                 </T>
+                {p.cantidad != null ? (
+                  <T size={12} weight={600} color={p.cantidad <= 0 ? C.red : p.apartado > 0 ? C.amberText : C.greyText}>
+                    Existencias: {cantidadTexto(p.cantidad)}
+                    {p.apartado > 0 ? ` · ${cantidadTexto(p.apartado)} apartado${p.apartado === 1 ? '' : 's'}` : ''}
+                  </T>
+                ) : null}
                 <T size={12} color={C.muted} numberOfLines={1}>
                   {nombreCategoria(p.categoria)} · {haceCuanto(p.actualizado)}
                 </T>
@@ -110,7 +117,7 @@ export default function MisProductos() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`${p.nombre}: ${p.disponible ? 'Disponible' : 'Agotado'}. Tocar para cambiar`}
-                onPress={() => setDisponible(p.id, !p.disponible)}
+                onPress={() => (p.cantidad != null && p.cantidad <= 0 && !p.disponible ? router.push({ pathname: '/producto-form', params: { id: p.id } }) : setDisponible(p.id, !p.disponible))}
                 style={{ height: 36, paddingHorizontal: 12, borderRadius: 18, backgroundColor: p.disponible ? C.greenTint : C.redTint, alignItems: 'center', justifyContent: 'center' }}
               >
                 <T size={12} weight={700} color={p.disponible ? C.greenDark : C.red}>

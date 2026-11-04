@@ -1,16 +1,24 @@
-# Mercaboot · Avance 2
+# Mercaboot · Avance 2.1
 
 App móvil para saber **qué hay hoy en las tiendas de tu comunidad** (San Francisco Javier, Santa Cruz Xoxocotlán, Oaxaca).
 Está hecha con Expo / React Native: el mismo código funciona en Android, iPhone y en el navegador.
 
-**Versión 2.0.0 · Avance 2** de la materia de Inteligencia Artificial (UABJO). Sobre el Avance 1 (inicios de sesión y las interfaces de cliente y de comerciante) esta versión agrega:
+**Versión 2.1.0 · Avance 2.1** de la materia de Inteligencia Artificial (UABJO). Sobre el Avance 1 (inicios de sesión y las interfaces de cliente y de comerciante) el **Avance 2** agregó:
 
 1. **Base de datos en la nube** (Supabase, que usa PostgreSQL): las cuentas, los negocios, los productos, los «clientes frecuentes» y los chats se guardan en internet, ya no en cada teléfono.
 2. **Tiempo real**: lo que el comerciante publica o cambia (un producto nuevo, «agotado», abrir o cerrar el negocio) lo ve el cliente **al instante, sin recargar**. Y al revés: los mensajes y los «clientes frecuentes» del cliente le llegan al comerciante en vivo.
 3. **Ubicación integrada**: distancia a cada tienda, «Cerca de ti» (lo más cercano primero) y «Cómo llegar».
 4. **Chat** entre cliente y comerciante, con su vista de cliente y su vista de comerciante.
 
-Todavía **no** incluye el chatbot / asistente de recetas, las reseñas, los avisos ni las fiestas (quedan para los siguientes avances).
+Y el **Avance 2.1** (esta versión) agrega:
+
+5. **Carrito y pedidos apartados**: el cliente agrega productos de **un** negocio a su carrito y toca «Apartar pedido»; elige si pasa a recogerlo o si se lo llevan, y si paga **en persona** o **por transferencia**. Los productos quedan **apartados** (nadie más puede pedir lo mismo) por el tiempo que fije el negocio, de 15 minutos a 24 horas. Si el cliente no llega o no paga a tiempo, el pedido se **libera solo** y el producto vuelve a estar a la venta: así el comerciante no pierde ventas ni se quedan productos guardados para nadie.
+6. **Existencias**: el comerciante puede escribir cuántos tiene de un producto; la app descuenta lo que entrega, lo marca «Agotado» al llegar a cero y le muestra al cliente cuántos quedan.
+7. **Clientes frecuentes que elige el comerciante**: ya no se lo pone el propio cliente. El comerciante nombra a quien le compra seguido y le da un **descuento** (de 0 a 50 %) y/o un **beneficio** (un regalo, un cupón…). El corazón del cliente pasó a ser **«Favoritos»**, una lista privada que el negocio no ve.
+8. **Pedido y chat juntos**: cada pedido aparece como una tarjeta dentro del chat entre el cliente y el comerciante, y cada cambio (aceptado, listo, cancelado, pago…) deja un aviso en la conversación.
+9. **Para que el comerciante no pierda**: +30 minutos que puede dar si el cliente avisa que viene, máximo 2 pedidos activos por negocio, y quien deja pedidos sin recoger (2 en 30 días) solo puede apartar pagando por transferencia; con 3 queda bloqueado en ese negocio.
+
+Todavía **no** incluye el pago con tarjeta en línea (necesita una cuenta con un proveedor de pagos), los avisos «push» con la app cerrada, el chatbot / asistente de recetas, las reseñas ni las fiestas (quedan para los siguientes avances).
 
 ## Qué incluye
 
@@ -21,21 +29,24 @@ Todavía **no** incluye el chatbot / asistente de recetas, las reseñas, los avi
 - La sesión se mantiene al cerrar y volver a abrir la app. Las contraseñas las guarda Supabase de forma segura (nunca escritas tal cual).
 - Quien es cliente y después quiere vender (o al revés) **no necesita otra cuenta**: desde su perfil toca «Abrir mi negocio» o «Ver la app como cliente».
 
-**Interfaz de cliente** (5 pestañas: Inicio · Buscar · Chats · Favoritos · Perfil)
+**Interfaz de cliente** (6 pestañas: Inicio · Buscar · Pedidos · Chats · Favoritos · Perfil)
 
 - **Inicio**: las tiendas de la comunidad con las vistas **Cerca de ti / Todas / A domicilio / Abiertas ahora**, categorías por tipo de negocio y buscador. Con la ubicación activada se ve la distancia a cada tienda.
 - **Buscar** productos y negocios (sin importar mayúsculas ni acentos), con filtros «Disponible ahora» y «A domicilio».
-- **Ficha del negocio**: dirección y distancia, horario, teléfono (botón **Llamar**), **Cómo llegar**, **Chatear**, entrega a domicilio y sus productos (hay / agotado / por encargo), que se actualizan en vivo.
+- **Ficha del negocio**: dirección y distancia, horario, teléfono (botón **Llamar**), **Cómo llegar**, **Chatear**, entrega a domicilio y sus productos (hay / agotado / por encargo / cuántos quedan), que se actualizan en vivo. Cada producto tiene su botón **Agregar** al carrito.
 - **Chats**: tus conversaciones con los negocios; un círculo rojo con un número avisa cuántos chats tienen mensajes sin leer.
-- **Favoritos** («♡ Cliente frecuente») y **Perfil** con ayuda.
+- **Carrito** y **Pedidos**: el carrito, el pedido que está esperando respuesta, el que ya está apartado (con su cuenta regresiva «Quedan 24 min»), los datos para pagar por transferencia, «Ya pagué», cancelar y el historial.
+- **Favoritos** («♡ Guardar en favoritos», privado) con los negocios donde el comerciante te nombró **cliente frecuente**, y **Perfil** con ayuda.
 
-**Interfaz de comerciante** (4 pestañas: Inicio · Productos · Chats · Perfil)
+**Interfaz de comerciante** (5 pestañas: Inicio · Productos · Pedidos · Chats · Perfil)
 
 - **Registrar su negocio**: uno nuevo (nombre, tipo de negocio entre 28 giros u «Otro», dirección) o **reclamar una de las tiendas reales del directorio** con su código de reclamo.
-- **Inicio**: interruptor de negocio abierto/cerrado, indicador «En vivo», cuántos productos hay y cuántos se agotaron, cuántos **clientes frecuentes** tiene, cuántos **chats sin leer** y los productos más recientes.
-- **Productos**: agregar, editar y eliminar (nombre, precio, «se vende por», categoría, solo por encargo); marcar **disponible / agotado** con un toque; buscar y filtrar.
+- **Inicio**: interruptor de negocio abierto/cerrado, indicador «En vivo», cuántos productos hay y cuántos se agotaron, cuántos **pedidos nuevos** hay por responder, cuántos **clientes frecuentes** nombró, cuántos **chats sin leer** y los productos más recientes.
+- **Productos**: agregar, editar y eliminar (nombre, precio, «se vende por», categoría, solo por encargo, **existencias**); marcar **disponible / agotado** con un toque; buscar y filtrar. Se ve cuánto hay y cuánto está apartado.
+- **Pedidos**: los pedidos llegan en vivo con aviso; **Aceptar / Rechazar**, **Marcar listo**, **Confirmar pago** (transferencia), **Dar 30 minutos más**, **No se presentó**, **Entregado y cobrado**; interruptor para dejar de recibir pedidos.
+- **Clientes frecuentes**: el comerciante decide quién lo es y qué le da (descuento, regalo o cupón).
 - **Chats**: los mensajes de sus clientes llegan en vivo; puede responder con texto o con respuestas rápidas.
-- **Perfil**: editar el negocio (logo, nombre, tipo, descripción, teléfono, correo, horario, entrega a domicilio, dirección y **ubicación en el mapa**), ver la app como cliente y dejar de administrar el negocio.
+- **Perfil**: editar el negocio (logo, nombre, tipo, descripción, teléfono, correo, horario, entrega a domicilio, dirección, **ubicación en el mapa** y, en «Pedidos y apartado», el **tiempo de apartado**, si acepta **transferencias** y sus datos de pago, que solo ve el cliente cuando acepta su pedido), ver la app como cliente y dejar de administrar el negocio.
 
 **Ubicación (y tu privacidad)**
 
@@ -50,7 +61,9 @@ Se hace una sola vez y es gratis. Necesitas una cuenta en [supabase.com](https:/
 > **Estado del proyecto del equipo:** el proyecto de Supabase «MercaBoot» ya tiene el esquema instalado y `src/config.ts` ya trae su dirección y su llave pública (anon). Solo queda el punto 3 (apagar «Confirm email»). Los pasos de abajo sirven para repetirlo con otro proyecto.
 
 1. **New project**: ponle un nombre (por ejemplo `mercaboot`), inventa una contraseña de base de datos (guárdala en privado) y elige la región más cercana. Espera un par de minutos a que termine de crearse.
-2. Menú **SQL Editor** → **New query** → pega **todo** el archivo [`supabase/esquema.sql`](supabase/esquema.sql) → **Run**. Debe terminar sin errores (se puede ejecutar más de una vez sin problema; no borra datos). Esto crea las tablas, las reglas de seguridad, el tiempo real y las 3 tiendas del directorio.
+2. Menú **SQL Editor** → **New query** → pega **todo** el archivo [`supabase/esquema.sql`](supabase/esquema.sql) → **Run**. Debe terminar sin errores (se puede ejecutar más de una vez sin problema; no borra datos). Esto crea las tablas, las reglas de seguridad, el tiempo real, los pedidos y las 3 tiendas del directorio.
+   *Si ya tenías instalado el Avance 2.0*, no hace falta empezar de cero: pega y ejecuta solo [`supabase/actualizacion-2-1.sql`](supabase/actualizacion-2-1.sql) (agrega pedidos, existencias y clientes frecuentes sin borrar nada).
+   *Opcional, para que los pedidos vencidos se liberen cada minuto aunque nadie tenga la app abierta*: en Supabase activa la extensión **pg_cron** (Integrations → Cron); el esquema programa solo la tarea. Sin ella, igual se liberan cuando alguien abre la app o hace un pedido.
 3. **Authentication → Sign In / Providers → Email** (el nombre puede cambiar un poco): **apaga «Confirm email»** y guarda. Sin esto, cada cuenta nueva tendría que confirmarse desde un correo y el registro se quedaría esperando.
 4. *(Opcional, solo para «¿Olvidaste tu contraseña?»)* **Authentication → URL Configuration → Redirect URLs** → agrega `mercaboot://**`. Así el enlace del correo abre la app. El envío de correos del plan gratis es muy limitado: sirve para probar, no para muchos usuarios.
 5. **Project Settings → API** (o el botón **Connect**) → copia dos datos:
@@ -67,7 +80,7 @@ Armar el APK necesita las herramientas de Android, así que se hace «en la nube
 
 **Forma 1 · GitHub Actions** (la que usamos). Sube **todos** los archivos de esta carpeta a un repositorio de GitHub (incluida la carpeta oculta `.github`).
 GitHub compila solo cuando subes cambios que incluyan el archivo `disparador-apk.txt` (pestaña **Actions** → **Construir APK**; tarda unos 15–25 minutos), o a mano con **Run workflow**.
-El resultado queda en **Releases** del repositorio: `Mercaboot-avance2.apk` (etiqueta `avance2-apk`).
+El resultado queda en **Releases** del repositorio: `Mercaboot-avance2-1.apk` (etiqueta `avance2-1-apk`). El del Avance 2.0 sigue disponible como `Mercaboot-avance2.apk` (etiqueta `avance2-apk`).
 
 - Antes de compilar, el flujo revisa `src/config.ts`. Si todavía tiene `REEMPLAZA-ESTO`, arma un APK **de prueba sin base de datos** que **no** se publica en Releases (queda solo como «artifact» de la corrida). Si encuentra una llave secreta, se detiene con un aviso.
 - Para compilar otra vez después de un cambio, edita `disparador-apk.txt` (por ejemplo, cambia el número de compilación) o usa **Run workflow**.
@@ -101,8 +114,12 @@ Usa un teléfono como **comerciante (A)** y otro como **cliente (B)**. Si solo t
 5. **En A**: pestaña **Productos → Agregar** y publica un producto. **En B aparece solo, en un par de segundos, sin tocar nada.**
 6. **En A**: marca ese producto como **Agotado**, o apaga el interruptor de «abierto». **En B cambia al instante.**
 7. **Chat, de B a A**: en la ficha del negocio toca **Chatear**, escribe un mensaje (o toca una respuesta rápida). **En A**, la pestaña **Chats** muestra un círculo rojo con el número 1; ábrela y responde. **En B** la respuesta llega al instante.
-8. **Cliente frecuente**: **en B** toca **♡ Cliente frecuente** en la ficha. **En A**, la pantalla **Inicio** muestra «1 Cliente frecuente».
-9. **Sin internet**: apaga el internet en B. Aparece el aviso «Sin internet…» y se ve lo último guardado. Al volver el internet, la app se pone al día sola.
+8. **Favoritos (privado)**: **en B** toca **♡ Guardar en favoritos** en la ficha. **En A** no se entera: lo suyo lo decide él.
+9. **Carrito y apartado**: **en A**, en **Perfil → Editar mi negocio → Pedidos y apartado**, deja 30 minutos de apartado y enciende «Pago por transferencia» con sus datos; en **Productos** escribe «Existencias» (por ejemplo, 5). **En B**, toca **Agregar** en un producto, abre **Ver carrito**, elige «Transferencia» y **Apartar pedido**. **En A** aparece solo el aviso «Pedido nuevo» y el número rojo en **Pedidos**.
+10. **Atender el pedido**: **en A**, abre el pedido y toca **Aceptar pedido**. **En B** aparece al instante «Haz la transferencia…» con los datos de pago; toca **Ya pagué**. **En A**: **Confirmar pago** → **Marcar listo** → **Entregado y cobrado**. Las existencias bajan solas y el pedido queda también como tarjeta en el chat.
+11. **Cliente frecuente (lo elige el comerciante)**: **en A**, desde el pedido toca **Nombrar cliente frecuente**, elige un descuento y/o un beneficio y guarda. **En B** aparece «⭐ Eres cliente frecuente» y su siguiente pedido ya lleva el descuento.
+12. **Que no se pierda el producto**: **en B** aparta un pedido y no lo atiendas. Al acabarse el tiempo (en el APK real, hasta 1 minuto después) el pedido pasa a «Venció» y el producto vuelve a estar a la venta; **en A** puedes darle **30 minutos más** antes de que venza.
+13. **Sin internet**: apaga el internet en B. Aparece el aviso «Sin internet…» y se ve lo último guardado. Al volver el internet, la app se pone al día sola.
 
 ## Probarla en tu computadora
 
@@ -152,6 +169,8 @@ El script muestra el código (se lo das al dueño y lo guardas en privado, **no*
 | Cambiar el ícono de la app o la pantalla de inicio (carpeta `assets/`) | `scripts/hacer-iconos.cjs`; luego `npm i --no-save sharp` y `node scripts/hacer-iconos.cjs` (GitHub lo hace solo al compilar) |
 | Cómo se leen y guardan datos, tiempo real y sesión | `src/store.tsx`, `src/lib/nube.ts`, `src/lib/supabase.ts` |
 | Chat | `src/ui/ChatView.tsx` y `src/app/chat-negocio/`, `src/app/chat-cliente/` |
+| Carrito, pedidos y clientes frecuentes (pantallas) | `src/app/carrito.tsx`, `src/app/pedido/[id].tsx`, `src/app/clientes.tsx`, `src/app/cliente/pedidos.tsx`, `src/app/comerciante/pedidos.tsx` |
+| Reglas y textos de los pedidos (tiempos, estados, totales) | `src/lib/pedidos.ts` (las reglas de verdad las aplica la base: `supabase/esquema.sql`, funciones `crear_pedido` y `pedido_accion`) |
 | Ubicación y distancias | `src/lib/ubicacion.tsx`, `src/lib/geo.ts`, `src/lib/distancia.ts` |
 | Pantallas del cliente / del comerciante | `src/app/cliente/` y `src/app/comerciante/` |
 
@@ -165,6 +184,9 @@ El script muestra el código (se lo das al dueño y lo guardas en privado, **no*
 
 ## Lo que todavía hay que saber
 
+- **Los avisos de pedidos funcionan con la app abierta** (un aviso dentro de la app y el número rojo). Con la app cerrada no suena nada: eso necesita notificaciones «push» (Firebase) y queda para un siguiente avance.
+- **El pago con tarjeta en línea no está**: hoy se paga en persona o por transferencia (el comerciante confirma que le llegó). Cobrar con tarjeta necesita una cuenta con un proveedor de pagos.
+- La cuenta regresiva usa el reloj del teléfono; quien manda es la base de datos, que libera los pedidos vencidos.
 - **Se necesita internet** para publicar, chatear e iniciar sesión. Sin internet la app muestra lo último que guardó en el teléfono, pero no deja cambiar nada.
 - Las cuentas y productos del Avance 1 estaban guardados solo en cada teléfono: **no pasan a la nube**; hay que crear las cuentas de nuevo.
 - Quien administra el proyecto de Supabase puede ver las tablas, incluidos los mensajes de los chats. Entre usuarios, un chat solo lo ven las dos personas que participan.

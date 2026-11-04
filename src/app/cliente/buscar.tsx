@@ -156,7 +156,7 @@ export default function Buscar() {
             No encontramos negocios con esos datos.
           </T>
         ) : (
-          tiendas.map((d) => <NegocioCard key={d.n.id} d={d} frecuente={favoritos.includes(d.n.id)} />)
+          tiendas.map((d) => <NegocioCard key={d.n.id} d={d} favorito={favoritos.includes(d.n.id)} />)
         )}
       </View>
     </Screen>

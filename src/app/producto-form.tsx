@@ -33,6 +33,7 @@ export default function ProductoForm() {
   const [unidadOtra, setUnidadOtra] = useState(previo && !opcionesUnidad.includes(previo.unidad) ? previo.unidad : '');
   const [disponible, setDisponible] = useState(previo?.disponible ?? true);
   const [porEncargo, setPorEncargo] = useState(previo?.porEncargo ?? false);
+  const [existencias, setExistencias] = useState(previo?.cantidad != null ? String(previo.cantidad) : '');
   const [categoria, setCategoria] = useState<CategoriaProducto>(previo?.categoria ?? categoriaInicial(giro));
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');
@@ -57,13 +58,23 @@ export default function ProductoForm() {
     return Number.isFinite(n) && n >= 0 ? n : null;
   }
 
+  /** Existencias: vacío = no se lleva la cuenta; si no es un número válido, `null`. */
+  function leerExistencias(): number | undefined | null {
+    const t = existencias.trim().replace(',', '.');
+    if (!t) return undefined;
+    const n = Number(t);
+    return Number.isFinite(n) && n >= 0 && n <= 99999 ? Math.round(n * 100) / 100 : null;
+  }
+
   async function guardar(otro: boolean) {
     const monto = leerPrecio();
+    const cantidad = leerExistencias();
     if (!nombre.trim()) return setError('Escribe el nombre del producto.');
     if (monto === null) return setError('El precio debe ser un número, por ejemplo 45 o 12.50.');
+    if (cantidad === null) return setError('Las existencias deben ser un número de 0 en adelante, por ejemplo 12 o 3.5. Déjalo vacío si no llevas la cuenta.');
     const unidadFinal = unidad === UNIDAD_OTRA ? unidadOtra.trim() : unidad;
     if (!unidadFinal) return setError('Escribe cómo se vende, por ejemplo «charola» o «vaso de 1 litro».');
-    const datos = { nombre, precio: monto, unidad: unidadFinal, disponible, porEncargo, categoria };
+    const datos = { nombre, precio: monto, unidad: unidadFinal, disponible, porEncargo, categoria, cantidad };
     setGuardando(true);
     const err = previo ? await editarProducto(previo.id, datos) : await agregarProducto(datos);
     setGuardando(false);
@@ -72,6 +83,7 @@ export default function ProductoForm() {
       setAviso(`Guardamos «${nombre.trim()}». Escribe el siguiente producto.`);
       setNombre('');
       setPrecio('');
+      setExistencias('');
       setCategoria(categoriaInicial(giro));
       setDisponible(true);
       setPorEncargo(false);
@@ -130,6 +142,27 @@ export default function ProductoForm() {
         {unidad === UNIDAD_OTRA ? (
           <Field label="¿Cómo se vende?" placeholder="Ej. charola, cazuela, vaso de 1 litro" value={unidadOtra} onChangeText={(t) => { setUnidadOtra(t); setError(''); }} />
         ) : null}
+
+        <View style={{ gap: 6 }}>
+          <Field
+            label="Existencias (opcional)"
+            placeholder="Ej. 12"
+            keyboardType="decimal-pad"
+            value={existencias}
+            onChangeText={(t) => {
+              setExistencias(t);
+              setError('');
+            }}
+          />
+          <T size={12} lh={1.4} color={C.muted}>
+            Si pones cuántos tienes, Mercaboot lleva la cuenta: baja sola cuando entregas un pedido y, al llegar a 0, el producto se marca agotado. Así nadie aparta lo que ya no hay. Déjalo vacío si no cuentas tus piezas.
+          </T>
+          {previo && previo.apartado > 0 ? (
+            <T size={12} weight={600} color={C.amberText}>
+              Ahora hay {previo.apartado} {previo.unidad} apartado en pedidos activos.
+            </T>
+          ) : null}
+        </View>
 
         <SelectField label="Categoría" value={nombreCategoria(categoria)} options={NOMBRES_CATEGORIA} onChange={(n) => setCategoria(idDeCategoria(n))} />
 

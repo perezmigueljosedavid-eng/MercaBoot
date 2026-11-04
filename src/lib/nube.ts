@@ -1,4 +1,18 @@
-import type { CategoriaProducto, Conversacion, Mensaje, Negocio, Producto } from '../data/tipos';
+import type {
+  CategoriaProducto,
+  ClienteFrecuente,
+  Conversacion,
+  EntregaPedido,
+  EstadoPago,
+  EstadoPedido,
+  LineaPedido,
+  Mensaje,
+  Negocio,
+  PagoPedido,
+  Pedido,
+  Producto,
+  TipoMensaje,
+} from '../data/tipos';
 
 /**
  * Traducción entre las tablas de la nube (supabase/esquema.sql, con_guiones_bajos) y los tipos de la app,
@@ -33,6 +47,9 @@ export interface FilaNegocio {
   lng: number | string | null;
   maps_url: string | null;
   del_directorio: boolean;
+  apartado_minutos: number;
+  acepta_pedidos: boolean;
+  acepta_transferencia: boolean;
   creado: string;
 }
 
@@ -45,6 +62,8 @@ export interface FilaProducto {
   disponible: boolean;
   categoria: string;
   por_encargo: boolean;
+  cantidad: number | string | null;
+  apartado: number | string | null;
   actualizado: string;
 }
 
@@ -73,6 +92,54 @@ export interface FilaMensaje {
   autor_id: string;
   texto: string;
   creado: string;
+  tipo?: string | null;
+  pedido_id?: string | null;
+}
+
+export interface FilaPedido {
+  id: string;
+  codigo: string;
+  negocio_id: string;
+  cliente_id: string;
+  cliente_nombre: string;
+  cliente_telefono: string | null;
+  estado: string;
+  motivo: string | null;
+  entrega: string;
+  direccion: string | null;
+  pago: string;
+  pago_estado: string;
+  referencia_pago: string | null;
+  nota: string | null;
+  items: number;
+  subtotal: number | string;
+  descuento_pct: number;
+  descuento: number | string;
+  total: number | string;
+  beneficio: string | null;
+  vence_en: string | null;
+  creado: string;
+  actualizado: string;
+}
+
+export interface FilaDetalle {
+  id: string;
+  pedido_id: string;
+  producto_id: string | null;
+  nombre: string;
+  unidad: string;
+  precio: number | string;
+  cantidad: number | string;
+  importe: number | string;
+}
+
+export interface FilaFrecuente {
+  id: string;
+  negocio_id: string;
+  cliente_id: string;
+  cliente_nombre: string;
+  descuento_pct: number;
+  beneficio: string | null;
 }
 
 export interface Favorito {
@@ -113,6 +180,9 @@ export const negocioDeFila = (f: FilaNegocio): Negocio => ({
   lng: num(f.lng),
   mapsUrl: txt(f.maps_url),
   delDirectorio: !!f.del_directorio,
+  apartadoMin: f.apartado_minutos ?? 60,
+  aceptaPedidos: f.acepta_pedidos ?? true,
+  aceptaTransferencia: !!f.acepta_transferencia,
   creado: ms(f.creado),
 });
 
@@ -125,6 +195,8 @@ export const productoDeFila = (f: FilaProducto): Producto => ({
   disponible: !!f.disponible,
   categoria: f.categoria as CategoriaProducto,
   porEncargo: !!f.por_encargo,
+  cantidad: num(f.cantidad),
+  apartado: num(f.apartado) ?? 0,
   actualizado: ms(f.actualizado),
 });
 
@@ -149,6 +221,54 @@ export const mensajeDeFila = (f: FilaMensaje): Mensaje => ({
   autorId: f.autor_id,
   texto: f.texto,
   creado: ms(f.creado),
+  tipo: (f.tipo === 'pedido' || f.tipo === 'aviso' ? f.tipo : 'texto') as TipoMensaje,
+  pedidoId: f.pedido_id ?? undefined,
+});
+
+export const pedidoDeFila = (f: FilaPedido): Pedido => ({
+  id: f.id,
+  codigo: f.codigo,
+  negocioId: f.negocio_id,
+  clienteId: f.cliente_id,
+  clienteNombre: f.cliente_nombre,
+  clienteTelefono: f.cliente_telefono ?? '',
+  estado: f.estado as EstadoPedido,
+  motivo: txt(f.motivo),
+  entrega: f.entrega as EntregaPedido,
+  direccion: txt(f.direccion),
+  pago: f.pago as PagoPedido,
+  pagoEstado: f.pago_estado as EstadoPago,
+  referenciaPago: txt(f.referencia_pago),
+  nota: txt(f.nota),
+  items: f.items,
+  subtotal: num(f.subtotal) ?? 0,
+  descuentoPct: f.descuento_pct ?? 0,
+  descuento: num(f.descuento) ?? 0,
+  total: num(f.total) ?? 0,
+  beneficio: txt(f.beneficio),
+  venceEn: f.vence_en ? ms(f.vence_en) : undefined,
+  creado: ms(f.creado),
+  actualizado: ms(f.actualizado),
+});
+
+export const lineaDeFila = (f: FilaDetalle): LineaPedido => ({
+  id: f.id,
+  pedidoId: f.pedido_id,
+  productoId: f.producto_id ?? undefined,
+  nombre: f.nombre,
+  unidad: f.unidad,
+  precio: num(f.precio) ?? 0,
+  cantidad: num(f.cantidad) ?? 0,
+  importe: num(f.importe) ?? 0,
+});
+
+export const frecuenteDeFila = (f: FilaFrecuente): ClienteFrecuente => ({
+  id: f.id,
+  negocioId: f.negocio_id,
+  clienteId: f.cliente_id,
+  clienteNombre: f.cliente_nombre,
+  descuentoPct: f.descuento_pct ?? 0,
+  beneficio: txt(f.beneficio),
 });
 
 /* ───────── de la app a la base ───────── */
@@ -179,6 +299,9 @@ export function filaDeCambioNegocio(p: Partial<Negocio>): Record<string, unknown
     f.lng = ok ? p.lng : null;
   }
   if ('mapsUrl' in p) f.maps_url = nulo(p.mapsUrl);
+  if ('apartadoMin' in p && typeof p.apartadoMin === 'number') f.apartado_minutos = Math.round(p.apartadoMin);
+  if ('aceptaPedidos' in p) f.acepta_pedidos = !!p.aceptaPedidos;
+  if ('aceptaTransferencia' in p) f.acepta_transferencia = !!p.aceptaTransferencia;
   return f;
 }
 

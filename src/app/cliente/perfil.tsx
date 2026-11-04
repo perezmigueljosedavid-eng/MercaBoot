@@ -95,7 +95,7 @@ export default function PerfilCliente() {
       )}
 
       <Group r={18}>
-        <Fila texto="Negocios frecuentes" detalle={String(favoritos.length)} onPress={() => router.navigate('/cliente/favoritos')} />
+        <Fila texto="Mis favoritos" detalle={String(favoritos.length)} onPress={() => router.navigate('/cliente/favoritos')} />
         <Fila texto="Ayuda" onPress={() => router.push('/ayuda')} />
       </Group>
       <Btn

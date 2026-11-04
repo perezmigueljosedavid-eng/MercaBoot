@@ -43,7 +43,7 @@ function EstadoEnVivo({ estado }: { estado: EstadoRed }) {
 }
 
 export default function HomeComerciante() {
-  const { s, negocio, actualizarNegocio, setDisponible, cuenta, seguidores, chatsSinLeer, estadoRed } = useStore();
+  const { s, negocio, actualizarNegocio, setDisponible, cuenta, numFrecuentes, pedidosPendientes, chatsSinLeer, estadoRed } = useStore();
   if (!negocio || !cuenta) return null;
 
   const propios = s.productos.filter((p) => p.negocioId === negocio.id);
@@ -81,6 +81,24 @@ export default function HomeComerciante() {
         <Toggle big value={negocio.abierto} onChange={(v) => actualizarNegocio({ abierto: v })} label="Negocio abierto" />
       </Card>
 
+      {pedidosPendientes > 0 ? (
+        <Pressable accessibilityRole="button" onPress={() => router.navigate('/comerciante/pedidos')}>
+          <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, backgroundColor: C.green, borderColor: C.green }}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <T size={16} weight={800} color={C.white}>
+                🛒 {pedidosPendientes} {pedidosPendientes === 1 ? 'pedido nuevo' : 'pedidos nuevos'} por responder
+              </T>
+              <T size={13} lh={1.35} color="#CFE6D9">
+                Sus productos ya están apartados. Acéptalos o recházalos antes de que se acabe el tiempo.
+              </T>
+            </View>
+            <T size={22} color={C.white}>
+              ›
+            </T>
+          </Card>
+        </Pressable>
+      ) : null}
+
       {faltaPerfil ? (
         <Pressable accessibilityRole="button" onPress={() => router.push('/editar-negocio')}>
           <Card style={{ gap: 4, padding: 16, backgroundColor: C.amberTint, borderColor: C.amber }}>
@@ -98,11 +116,31 @@ export default function HomeComerciante() {
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
         <Cifra valor={String(disponibles)} etiqueta="Productos disponibles" />
         <Cifra valor={String(agotados)} etiqueta="Agotados" color={agotados ? C.red : C.ink} />
-        <Cifra valor={String(seguidores)} etiqueta={seguidores === 1 ? 'Cliente frecuente' : 'Clientes frecuentes'} />
+        <Pressable accessibilityRole="button" accessibilityLabel="Abrir pedidos" onPress={() => router.navigate('/comerciante/pedidos')} style={{ flexBasis: '48%', flexGrow: 1 }}>
+          <Cifra valor={String(pedidosPendientes)} etiqueta={pedidosPendientes === 1 ? 'Pedido nuevo' : 'Pedidos nuevos'} color={pedidosPendientes ? C.red : C.ink} />
+        </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="Abrir chats" onPress={() => router.navigate('/comerciante/chats')} style={{ flexBasis: '48%', flexGrow: 1 }}>
           <Cifra valor={String(chatsSinLeer)} etiqueta={chatsSinLeer === 1 ? 'Chat sin leer' : 'Chats sin leer'} color={chatsSinLeer ? C.red : C.ink} />
         </Pressable>
       </View>
+
+      {/* clientes frecuentes: los elige el comerciante */}
+      <Pressable accessibilityRole="button" accessibilityLabel="Abrir clientes frecuentes" onPress={() => router.push('/clientes')}>
+        <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 }}>
+          <T size={22}>⭐</T>
+          <View style={{ flex: 1, gap: 2 }}>
+            <T size={15} weight={700}>
+              {numFrecuentes} {numFrecuentes === 1 ? 'cliente frecuente' : 'clientes frecuentes'}
+            </T>
+            <T size={13} lh={1.35} color={C.muted}>
+              Tú decides quién lo es y qué le das: descuento, regalo o cupón.
+            </T>
+          </View>
+          <T size={22} color={C.muted}>
+            ›
+          </T>
+        </Card>
+      </Pressable>
 
       {/* productos */}
       <View style={{ gap: 12 }}>
@@ -129,7 +167,7 @@ export default function HomeComerciante() {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`${p.nombre}: ${p.disponible ? 'Disponible' : 'Agotado'}. Tocar para cambiar`}
-                    onPress={() => setDisponible(p.id, !p.disponible)}
+                    onPress={() => (p.cantidad != null && p.cantidad <= 0 && !p.disponible ? router.push({ pathname: '/producto-form', params: { id: p.id } }) : setDisponible(p.id, !p.disponible))}
                     style={{ height: 34, paddingHorizontal: 12, borderRadius: 17, backgroundColor: p.disponible ? C.greenTint : C.redTint, alignItems: 'center', justifyContent: 'center' }}
                   >
                     <T size={12} weight={700} color={p.disponible ? C.greenDark : C.red}>

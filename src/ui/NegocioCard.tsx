@@ -3,14 +3,18 @@ import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
 import { abrirMapas, etiquetaDistancia } from '../lib/geo';
 import type { NegocioConDatos } from '../lib/usarDatos';
+import { useStore } from '../store';
 import { Logo } from './Logo';
 import { Btn, Card, OpenDot, Tag } from './kit';
 import { T } from './T';
 import { C } from './theme';
 
 /** Tarjeta de un negocio con su distancia, sus existencias y los botones para verlo, chatear o llegar. */
-export function NegocioCard({ d, frecuente = false }: { d: NegocioConDatos; frecuente?: boolean }) {
+export function NegocioCard({ d, favorito = false }: { d: NegocioConDatos; favorito?: boolean }) {
   const { n } = d;
+  const { s, cuenta } = useStore();
+  // «Cliente frecuente» lo decide el comerciante; «favorito» lo marca el propio cliente.
+  const trato = cuenta ? s.frecuentes.find((f) => f.negocioId === n.id && f.clienteId === cuenta.id) : undefined;
   const reclamado = !!n.duenoId;
   const dist = etiquetaDistancia(d.dist);
   const subtitulo = [n.giro, dist ?? n.direccion].filter(Boolean).join(' · ');
@@ -49,9 +53,14 @@ export function NegocioCard({ d, frecuente = false }: { d: NegocioConDatos; frec
                 A domicilio
               </Tag>
             ) : null}
-            {frecuente ? (
+            {trato ? (
               <Tag bg={C.amberTint} fg={C.amberText}>
-                Cliente frecuente
+                ⭐ Cliente frecuente{trato.descuentoPct > 0 ? ` ${trato.descuentoPct}%` : ''}
+              </Tag>
+            ) : null}
+            {favorito ? (
+              <Tag bg={C.grey} fg={C.greyText}>
+                ♥ Favorito
               </Tag>
             ) : null}
           </View>

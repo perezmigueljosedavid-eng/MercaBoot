@@ -4,31 +4,53 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import type { RealtimeChannel, Session } from '@supabase/supabase-js';
 import { NUBE_CONFIGURADA } from './config';
-import type { CategoriaProducto, Conversacion, Cuenta, Mensaje, Negocio, Producto, Rol } from './data/tipos';
+import type {
+  CategoriaProducto,
+  ClienteFrecuente,
+  Conversacion,
+  Cuenta,
+  EntregaPedido,
+  LineaCarrito,
+  LineaPedido,
+  Mensaje,
+  Negocio,
+  PagoPedido,
+  Pedido,
+  Producto,
+  Rol,
+} from './data/tipos';
 import {
   conversacionDeFila,
   esErrorDeRed,
   favoritoDeFila,
   filaDeCambioNegocio,
+  frecuenteDeFila,
+  lineaDeFila,
   mensajeDeFila,
   negocioDeFila,
+  pedidoDeFila,
   productoDeFila,
   textoError,
   type Favorito,
   type FilaConversacion,
+  type FilaDetalle,
   type FilaFavorito,
+  type FilaFrecuente,
   type FilaMensaje,
   type FilaNegocio,
+  type FilaPedido,
   type FilaPerfil,
   type FilaProducto,
 } from './lib/nube';
+import { avisoDeCambio, cantidadTexto, disponibleParaPedir, esActivo, pasoCantidad, redondear, totales } from './lib/pedidos';
 import { supabase } from './lib/supabase';
 
 /**
  * Estado de la app, guardado en la nube (Supabase).
  *
  *  · Cuentas: Supabase Auth (correo + contraseña); la sesión queda en el teléfono.
- *  · Datos: negocios, productos, favoritos, conversaciones y mensajes viven en la base de datos compartida.
+ *  · Datos: negocios, productos, favoritos, conversaciones, mensajes, pedidos y clientes frecuentes viven en la base de datos compartida.
+ *  · Carrito: se arma en el teléfono (es de un solo negocio); al apartarlo, la base de datos revisa todo y crea el pedido.
  *  · En vivo: la app escucha los cambios (Supabase Realtime). Si el aviso en vivo no está disponible, vuelve a
  *    preguntar cada pocos segundos, así que dos teléfonos siempre acaban viendo lo mismo.
  *  · Sin internet: se muestra lo último que se guardó en el teléfono.
@@ -69,7 +91,49 @@ export interface DatosProducto {
   disponible: boolean;
   categoria: CategoriaProducto;
   porEncargo?: boolean;
+  /** Existencias (opcional): sin valor = no se lleva la cuenta y no hay límite. */
+  cantidad?: number;
 }
+
+/** Cómo quiere el cliente recibir y pagar su pedido. */
+export interface DatosPedido {
+  entrega: EntregaPedido;
+  /** Solo para entrega a domicilio. */
+  direccion?: string;
+  pago: PagoPedido;
+  nota?: string;
+}
+
+/** Lo que el cliente o el comerciante puede hacerle a un pedido (la base de datos revisa quién puede hacer qué). */
+export type AccionPedido =
+  | 'cancelar'
+  | 'reportar_pago'
+  | 'aceptar'
+  | 'listo'
+  | 'completar'
+  | 'no_se_presento'
+  | 'extender'
+  | 'confirmar_pago'
+  | 'rechazar_pago';
+
+/** El carrito guardado en el teléfono: un solo negocio a la vez. */
+interface CarritoGuardado {
+  uid: string;
+  negocioId: string;
+  lineas: LineaCarrito[];
+}
+
+/** El carrito ya con los productos de verdad (los que dejaron de existir se quitan solos). */
+export interface CarritoVista {
+  negocio: Negocio;
+  lineas: { producto: Producto; cantidad: number }[];
+  /** Cuántos productos distintos lleva. */
+  cuantos: number;
+  subtotal: number;
+}
+
+/** Lo que devuelve `agregarAlCarrito` cuando el carrito ya tiene productos de otro negocio. */
+export const OTRO_NEGOCIO = 'otro-negocio';
 
 export interface NegocioLibre {
   id: string;
@@ -84,6 +148,10 @@ export interface Datos {
   negocios: Negocio[];
   productos: Producto[];
   conversaciones: Conversacion[];
+  /** Pedidos que esta cuenta puede ver: los que hizo como cliente y los que recibe su negocio. */
+  pedidos: Pedido[];
+  /** Clientes frecuentes: los del negocio de esta cuenta, y los negocios que la nombraron a ella. */
+  frecuentes: ClienteFrecuente[];
 }
 
 /** ¿Hay mensajes que esta persona todavía no lee? (`soyCliente`: si es el cliente o el dueño del negocio) */
@@ -106,15 +174,25 @@ interface Base {
   favs: Favorito[];
   conversaciones: Conversacion[];
   mensajes: Record<string, Mensaje[]>;
+  pedidos: Pedido[];
+  frecuentes: ClienteFrecuente[];
 }
 
-const VACIO: Base = { perfil: null, negocios: [], productos: [], favs: [], conversaciones: [], mensajes: {} };
+const VACIO: Base = { perfil: null, negocios: [], productos: [], favs: [], conversaciones: [], mensajes: {}, pedidos: [], frecuentes: [] };
 
 type Accion =
   | { t: 'limpiar' }
   | { t: 'cache'; c: Partial<Base> }
   | { t: 'perfil'; p: FilaPerfil | null }
-  | { t: 'todo'; negocios: Negocio[]; productos: Producto[]; favs: Favorito[]; conversaciones: Conversacion[] }
+  | {
+      t: 'todo';
+      negocios: Negocio[];
+      productos: Producto[];
+      favs: Favorito[];
+      conversaciones: Conversacion[];
+      pedidos: Pedido[];
+      frecuentes: ClienteFrecuente[];
+    }
   | { t: 'neg'; n: Negocio }
   | { t: 'negDel'; id: string }
   | { t: 'prod'; p: Producto }
@@ -125,7 +203,11 @@ type Accion =
   | { t: 'convDel'; id: string }
   | { t: 'msgs'; conv: string; ms: Mensaje[] }
   | { t: 'msg'; m: Mensaje }
-  | { t: 'msgDel'; conv: string; id: string };
+  | { t: 'msgDel'; conv: string; id: string }
+  | { t: 'ped'; p: Pedido }
+  | { t: 'pedDel'; id: string }
+  | { t: 'frec'; f: ClienteFrecuente }
+  | { t: 'frecDel'; id: string };
 
 const upsert = <A extends { id: string }>(lista: A[], x: A): A[] => {
   const i = lista.findIndex((y) => y.id === x.id);
@@ -154,7 +236,15 @@ function reductor(b: Base, a: Accion): Base {
     case 'perfil':
       return { ...b, perfil: a.p };
     case 'todo':
-      return { ...b, negocios: a.negocios, productos: a.productos, favs: a.favs, conversaciones: a.conversaciones };
+      return {
+        ...b,
+        negocios: a.negocios,
+        productos: a.productos,
+        favs: a.favs,
+        conversaciones: a.conversaciones,
+        pedidos: a.pedidos,
+        frecuentes: a.frecuentes,
+      };
     case 'neg':
       return { ...b, negocios: upsert(b.negocios, a.n) };
     case 'negDel':
@@ -187,6 +277,14 @@ function reductor(b: Base, a: Accion): Base {
     }
     case 'msgDel':
       return { ...b, mensajes: { ...b.mensajes, [a.conv]: (b.mensajes[a.conv] ?? []).filter((x) => x.id !== a.id) } };
+    case 'ped':
+      return { ...b, pedidos: upsert(b.pedidos, a.p) };
+    case 'pedDel':
+      return { ...b, pedidos: b.pedidos.filter((x) => x.id !== a.id) };
+    case 'frec':
+      return { ...b, frecuentes: upsert(b.frecuentes, a.f) };
+    case 'frecDel':
+      return { ...b, frecuentes: b.frecuentes.filter((x) => x.id !== a.id) };
     default:
       return b;
   }
@@ -196,7 +294,11 @@ function reductor(b: Base, a: Accion): Base {
 
 const PREFIJO = 'mercaboot:v3:';
 const claveModo = (uid: string) => `${PREFIJO}modo:${uid}`;
-const claveCache = (uid: string) => `${PREFIJO}cache:${uid}`;
+// «cache21»: la copia de la versión anterior no tenía pedidos ni existencias, así que no se reutiliza.
+const claveCache = (uid: string) => `${PREFIJO}cache21:${uid}`;
+const claveCarrito = (uid: string) => `${PREFIJO}carrito:${uid}`;
+/** Pedidos que se guardan en la copia local cuando no cabe todo. */
+const PEDIDOS_EN_COPIA = 40;
 /** Un valor muy grande no cabe en el almacenamiento del teléfono: se guarda sin las fotos. */
 const LIMITE_CACHE = 1_200_000;
 
@@ -206,6 +308,8 @@ interface Cache {
   productos: Producto[];
   favs: Favorito[];
   conversaciones: Conversacion[];
+  pedidos: Pedido[];
+  frecuentes: ClienteFrecuente[];
 }
 
 /* ───────── contexto ───────── */
@@ -219,10 +323,12 @@ interface Ctx {
   cuenta: Cuenta | null;
   /** Negocio que administra la cuenta de comerciante en sesión. */
   negocio: Negocio | null;
-  /** Ids de los negocios que esta cuenta marcó como favoritos («cliente frecuente»). */
+  /** Ids de los negocios que esta cuenta guardó en favoritos (es privado: el negocio no lo ve). */
   favoritos: string[];
-  /** Cuántos clientes marcaron como favorito al negocio de esta cuenta. */
-  seguidores: number;
+  /** Cuántos clientes frecuentes tiene el negocio de esta cuenta (los elige el comerciante). */
+  numFrecuentes: number;
+  /** Cliente: sus pedidos activos. Comerciante: pedidos nuevos que esperan respuesta. */
+  pedidosPendientes: number;
   estadoRed: EstadoRed;
   /** Aviso corto y pasajero (por ejemplo «Sin conexión»). */
   aviso: string | null;
@@ -265,6 +371,33 @@ interface Ctx {
   /** El comerciante responde en una conversación de su negocio. */
   enviarComoNegocio: (convId: string, texto: string) => Promise<string | null>;
   marcarLeida: (convId: string) => void;
+
+  /** El carrito del cliente (de un solo negocio). `null` si está vacío. */
+  carrito: CarritoVista | null;
+  /**
+   * Agrega un producto al carrito (un paso más de cantidad, o la `cantidad` que se pida).
+   * Devuelve `null` si se agregó; `OTRO_NEGOCIO` si el carrito tiene productos de otro negocio
+   * (con `vaciarAntes` se cambia de negocio); o un mensaje de por qué no se pudo.
+   */
+  agregarAlCarrito: (productoId: string, cantidad?: number, vaciarAntes?: boolean) => string | null;
+  /** Pone la cantidad exacta de un producto (0 lo quita). Devuelve un mensaje si tuvo que ajustarla a lo que hay. */
+  ponerCantidad: (productoId: string, cantidad: number) => string | null;
+  quitarDelCarrito: (productoId: string) => void;
+  vaciarCarrito: () => void;
+  /** Aparta el carrito como pedido. La base de datos revisa todo y, si algo no se puede, devuelve el motivo. */
+  crearPedido: (d: DatosPedido) => Promise<{ error: string } | { pedido: Pedido }>;
+  /** Cambia un pedido (aceptar, cancelar, avisar un pago…). Devuelve el motivo si no se pudo. */
+  accionPedido: (pedidoId: string, accion: AccionPedido, texto?: string) => Promise<string | null>;
+  /** Lo que lleva un pedido, con los nombres y precios de cuando se apartó. `null` si no se pudo leer. */
+  lineasDe: (pedidoId: string) => Promise<LineaPedido[] | null>;
+  /** Datos para pagar por transferencia: solo los recibe el cliente de ese pedido, cuando el negocio ya lo aceptó. */
+  datosPagoDe: (pedidoId: string) => Promise<string | null>;
+  /** El comerciante lee sus datos para recibir transferencias (`null` si no se pudieron leer). */
+  leerDatosPago: () => Promise<string | null>;
+  guardarDatosPago: (texto: string) => Promise<string | null>;
+  /** El comerciante nombra (o cambia) a un cliente frecuente: descuento de 0 a 50 % y/o un beneficio. */
+  marcarFrecuente: (clienteId: string, descuentoPct: number, beneficio?: string) => Promise<string | null>;
+  quitarFrecuente: (clienteId: string) => Promise<string | null>;
 }
 
 const StoreCtx = createContext<Ctx | null>(null);
@@ -304,6 +437,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   /** Mientras se registra o inicia sesión, la app no cambia de pantalla hasta terminar todos los pasos. */
   const bloqueada = useRef(false);
   const ultimaSesion = useRef<Session | null>(null);
+  const [carro, setCarro] = useState<CarritoGuardado | null>(null);
+  const carroRef = useRef<CarritoGuardado | null>(null);
+  /** Lo que lleva cada pedido no cambia nunca, así que se guarda en memoria después de leerlo. */
+  const lineasGuardadas = useRef(new Map<string, LineaPedido[]>());
+  /** Pedidos que esta persona acaba de cambiar ella misma (para no avisarle de lo que ya sabe). */
+  const propias = useRef(new Map<string, number>());
+  /** Última vez que se pidió soltar los pedidos que se pasaron de tiempo. */
+  const ultimoVencer = useRef(0);
 
   useEffect(() => {
     baseRef.current = base;
@@ -323,6 +464,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     modoRef.current = m;
     const quien = id ?? uidRef.current;
     if (quien) AsyncStorage.setItem(claveModo(quien), m).catch(() => {});
+  }, []);
+
+  /** Cambia el carrito en memoria y lo guarda en el teléfono (`guardar` en false = solo se acaba de leer de ahí). */
+  const fijarCarro = useCallback((c: CarritoGuardado | null, guardar = true) => {
+    carroRef.current = c;
+    setCarro(c);
+    const quien = c?.uid ?? uidRef.current;
+    if (!guardar || !quien) return;
+    if (c && c.lineas.length > 0) AsyncStorage.setItem(claveCarrito(quien), JSON.stringify(c)).catch(() => {});
+    else AsyncStorage.removeItem(claveCarrito(quien)).catch(() => {});
   }, []);
 
   const bloquear = useCallback(() => {
@@ -375,15 +526,25 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     try {
       do {
         pendiente.current = false;
-        const [perfil, negocios, productos, favs, convs] = await Promise.all([
+        // Los pedidos que se pasaron de tiempo se sueltan (la base de datos también lo hace sola cada minuto).
+        if (Date.now() - ultimoVencer.current > 30_000) {
+          ultimoVencer.current = Date.now();
+          supabase.rpc('vencer_pedidos').then(
+            () => {},
+            () => {},
+          );
+        }
+        const [perfil, negocios, productos, favs, convs, peds, frecs] = await Promise.all([
           supabase.from('perfiles').select('id,nombre,correo,telefono,foto_uri').eq('id', id).maybeSingle(),
           supabase.from('negocios').select('*').order('creado', { ascending: true }),
           supabase.from('productos').select('*'),
           supabase.from('favoritos').select('id,usuario_id,negocio_id'),
           supabase.from('conversaciones').select('*'),
+          supabase.from('pedidos').select('*').order('creado', { ascending: false }).limit(300),
+          supabase.from('clientes_frecuentes').select('*'),
         ]);
         if (uidRef.current !== id) return;
-        const error = [perfil, negocios, productos, favs, convs].map((r) => r.error).find(Boolean);
+        const error = [perfil, negocios, productos, favs, convs, peds, frecs].map((r) => r.error).find(Boolean);
         if (error) {
           if (esErrorDeRed(error)) setEstadoRed('sin-internet');
           else setEstadoRed(canalVivo.current ? 'en-vivo' : 'sin-vivo');
@@ -396,6 +557,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           productos: ((productos.data ?? []) as FilaProducto[]).map(productoDeFila),
           favs: ((favs.data ?? []) as FilaFavorito[]).map(favoritoDeFila),
           conversaciones: ((convs.data ?? []) as FilaConversacion[]).map(conversacionDeFila),
+          pedidos: ((peds.data ?? []) as FilaPedido[]).map(pedidoDeFila),
+          frecuentes: ((frecs.data ?? []) as FilaFrecuente[]).map(frecuenteDeFila),
         });
         setEstadoRed(canalVivo.current ? 'en-vivo' : 'sin-vivo');
         // Los chats que están abiertos también se ponen al día.
@@ -465,10 +628,33 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         case 'mensajes':
           if (!borrar) dispatch({ t: 'msg', m: mensajeDeFila(nuevo as FilaMensaje) });
           break;
+        case 'pedidos':
+          if (borrar) dispatch({ t: 'pedDel', id });
+          else {
+            const ped = pedidoDeFila(nuevo as FilaPedido);
+            const yo = uidRef.current;
+            const propio = (propias.current.get(ped.id) ?? 0) > Date.now() - 5000;
+            if (yo && !propio) {
+              const antes = baseRef.current.pedidos.find((x) => x.id === ped.id);
+              const esMiNegocio = baseRef.current.negocios.find((x) => x.id === ped.negocioId)?.duenoId === yo;
+              const texto = esMiNegocio
+                ? avisoDeCambio(antes, ped, 'comerciante')
+                : ped.clienteId === yo
+                  ? avisoDeCambio(antes, ped, 'cliente')
+                  : null;
+              if (texto) avisar(texto);
+            }
+            dispatch({ t: 'ped', p: ped });
+          }
+          break;
+        case 'clientes_frecuentes':
+          if (borrar) dispatch({ t: 'frecDel', id });
+          else dispatch({ t: 'frec', f: frecuenteDeFila(nuevo as FilaFrecuente) });
+          break;
         default:
       }
     },
-    [confirmarNegocio],
+    [avisar, confirmarNegocio],
   );
 
   const cerrarCanal = useCallback(() => {
@@ -482,7 +668,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     (id: string) => {
       cerrarCanal();
       let canal = supabase.channel(`mercaboot-${id.slice(0, 8)}-${Date.now().toString(36)}`);
-      for (const tabla of ['negocios', 'productos', 'favoritos', 'conversaciones', 'mensajes']) {
+      for (const tabla of ['negocios', 'productos', 'favoritos', 'conversaciones', 'mensajes', 'pedidos', 'clientes_frecuentes']) {
         canal = canal.on('postgres_changes', { event: '*', schema: 'public', table: tabla }, (p) =>
           alCambiar(tabla, p as unknown as Parameters<typeof alCambiar>[1]),
         );
@@ -515,6 +701,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (!vivo) return;
         cerrarCanal();
         dispatch({ t: 'limpiar' });
+        fijarCarro(null, false);
+        lineasGuardadas.current.clear();
+        propias.current.clear();
         setModo(null);
         setEstadoRed('conectando');
         setLocalListo(true);
@@ -525,11 +714,28 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
     (async () => {
       try {
-        const [m, c] = await Promise.all([AsyncStorage.getItem(claveModo(uid)), AsyncStorage.getItem(claveCache(uid))]);
+        const [m, c, k] = await Promise.all([
+          AsyncStorage.getItem(claveModo(uid)),
+          AsyncStorage.getItem(claveCache(uid)),
+          AsyncStorage.getItem(claveCarrito(uid)),
+        ]);
         if (!vivo) return;
         if (m === 'cliente' || m === 'comerciante') {
           setModo(m);
           modoRef.current = m;
+        }
+        if (k && !carroRef.current) {
+          try {
+            const g = JSON.parse(k) as CarritoGuardado;
+            const lineas = (Array.isArray(g.lineas) ? g.lineas : [])
+              .filter((l) => l && typeof l.productoId === 'string' && typeof l.cantidad === 'number' && l.cantidad > 0)
+              .slice(0, 30);
+            if (g.uid === uid && typeof g.negocioId === 'string' && lineas.length > 0) {
+              fijarCarro({ uid, negocioId: g.negocioId, lineas }, false);
+            }
+          } catch {
+            /* carrito dañado: se empieza vacío */
+          }
         }
         if (c && baseRef.current.negocios.length === 0) {
           const guardado = JSON.parse(c) as Cache;
@@ -547,22 +753,34 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       vivo = false;
       cerrarCanal();
     };
-  }, [uid, abrirCanal, cerrarCanal, refrescar]);
+  }, [uid, abrirCanal, cerrarCanal, fijarCarro, refrescar]);
 
   // Copia local de lo último visto (para abrir la app sin internet).
   useEffect(() => {
     if (!uid || !base.perfil) return;
     const t = setTimeout(() => {
-      let c: Cache = { perfil: base.perfil, negocios: base.negocios, productos: base.productos, favs: base.favs, conversaciones: base.conversaciones };
+      let c: Cache = {
+        perfil: base.perfil,
+        negocios: base.negocios,
+        productos: base.productos,
+        favs: base.favs,
+        conversaciones: base.conversaciones,
+        pedidos: base.pedidos,
+        frecuentes: base.frecuentes,
+      };
       let texto = JSON.stringify(c);
       if (texto.length > LIMITE_CACHE) {
         c = { ...c, negocios: c.negocios.map((n) => ({ ...n, logoUri: undefined })) };
         texto = JSON.stringify(c);
       }
+      if (texto.length > LIMITE_CACHE) {
+        c = { ...c, pedidos: [...c.pedidos].sort((a, b) => b.creado - a.creado).slice(0, PEDIDOS_EN_COPIA) };
+        texto = JSON.stringify(c);
+      }
       if (texto.length <= LIMITE_CACHE) AsyncStorage.setItem(claveCache(uid), texto).catch(() => {});
     }, 1500);
     return () => clearTimeout(t);
-  }, [uid, base.perfil, base.negocios, base.productos, base.favs, base.conversaciones]);
+  }, [uid, base.perfil, base.negocios, base.productos, base.favs, base.conversaciones, base.pedidos, base.frecuentes]);
 
   useEffect(() => {
     estadoRedRef.current = estadoRed;
@@ -622,10 +840,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [sesion, uid, base.perfil, modo, negocio]);
 
   const favoritos = useMemo(() => base.favs.filter((f) => f.usuarioId === uid).map((f) => f.negocioId), [base.favs, uid]);
-  const seguidores = useMemo(
-    () => (negocio ? base.favs.filter((f) => f.negocioId === negocio.id && f.usuarioId !== uid).length : 0),
-    [base.favs, negocio, uid],
+  const numFrecuentes = useMemo(
+    () => (negocio ? base.frecuentes.filter((f) => f.negocioId === negocio.id).length : 0),
+    [base.frecuentes, negocio],
   );
+
+  const pedidosPendientes = useMemo(() => {
+    if (!uid || !cuenta) return 0;
+    if (cuenta.rol === 'comerciante' && negocio) return base.pedidos.filter((p) => p.negocioId === negocio.id && p.estado === 'pendiente').length;
+    return base.pedidos.filter((p) => p.clienteId === uid && esActivo(p)).length;
+  }, [base.pedidos, cuenta, negocio, uid]);
+
+  const carrito = useMemo<CarritoVista | null>(() => {
+    if (!uid || !carro || carro.uid !== uid) return null;
+    const neg = base.negocios.find((n) => n.id === carro.negocioId);
+    if (!neg) return null;
+    const lineas = carro.lineas.flatMap((l) => {
+      const producto = base.productos.find((p) => p.id === l.productoId);
+      return producto ? [{ producto, cantidad: l.cantidad }] : [];
+    });
+    if (lineas.length === 0) return null;
+    const conPrecio = lineas.flatMap((l) => (l.producto.precio != null ? [{ precio: l.producto.precio, cantidad: l.cantidad }] : []));
+    return { negocio: neg, lineas, cuantos: lineas.length, subtotal: totales(conPrecio, 0).subtotal };
+  }, [uid, carro, base.negocios, base.productos]);
 
   const chatsSinLeer = useMemo(() => {
     if (!uid || !cuenta) return 0;
@@ -636,8 +873,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [base.conversaciones, cuenta, negocio, uid]);
 
   const datos = useMemo<Datos>(
-    () => ({ negocios: base.negocios, productos: base.productos, conversaciones: base.conversaciones }),
-    [base.negocios, base.productos, base.conversaciones],
+    () => ({
+      negocios: base.negocios,
+      productos: base.productos,
+      conversaciones: base.conversaciones,
+      pedidos: base.pedidos,
+      frecuentes: base.frecuentes,
+    }),
+    [base.negocios, base.productos, base.conversaciones, base.pedidos, base.frecuentes],
   );
 
   /* ───── cuenta ───── */
@@ -942,6 +1185,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (!mio) return 'Tu cuenta no administra ningún negocio.';
     const nombre = d.nombre.trim();
     if (!nombre) return 'Escribe el nombre del producto.';
+    if (d.cantidad != null && !(d.cantidad >= 0 && d.cantidad <= 99999999)) return 'Las existencias deben ser un número de 0 en adelante.';
     if (baseRef.current.productos.some((x) => x.negocioId === mio.id && x.nombre.trim().toLowerCase() === nombre.toLowerCase())) {
       return 'Ya tienes un producto con ese nombre.';
     }
@@ -955,6 +1199,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         disponible: d.disponible,
         categoria: d.categoria,
         por_encargo: !!d.porEncargo,
+        cantidad: d.cantidad ?? null,
       })
       .select('*')
       .single();
@@ -981,6 +1226,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (d.disponible !== undefined) fila.disponible = d.disponible;
     if (d.categoria !== undefined) fila.categoria = d.categoria;
     if (d.porEncargo !== undefined) fila.por_encargo = d.porEncargo;
+    if ('cantidad' in d) {
+      if (d.cantidad != null && !(d.cantidad >= 0 && d.cantidad <= 99999999)) return 'Las existencias deben ser un número de 0 en adelante.';
+      fila.cantidad = d.cantidad ?? null;
+    }
     if (Object.keys(fila).length === 0) return null;
     const { data, error } = await supabase.from('productos').update(fila).eq('id', id).select('*');
     if (error) return (error as { code?: string }).code === '23505' ? 'Ya tienes un producto con ese nombre.' : textoError(error);
@@ -1052,7 +1301,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const limpio = texto.trim();
       if (!limpio) return null;
       if (limpio.length > 2000) return 'El mensaje es muy largo (máximo 2000 letras).';
-      const tmp: Mensaje = { id: `tmp-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, conversacionId: conv, autorId: id, texto: limpio, creado: Date.now(), pendiente: true };
+      const tmp: Mensaje = { id: `tmp-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, conversacionId: conv, autorId: id, texto: limpio, creado: Date.now(), tipo: 'texto', pendiente: true };
       if (!baseRef.current.mensajes[conv]) dispatch({ t: 'msgs', conv, ms: [] });
       dispatch({ t: 'msg', m: tmp });
       const { data, error } = await supabase
@@ -1100,6 +1349,195 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     supabase.rpc('marcar_leida', { p_conv: conv }).then(() => {});
   }, []);
 
+  /* ───── carrito ───── */
+
+  const agregarAlCarrito = useCallback<Ctx['agregarAlCarrito']>(
+    (productoId, cantidad, vaciarAntes) => {
+      const id = uidRef.current;
+      if (!id) return 'Inicia sesión para usar el carrito.';
+      const prod = baseRef.current.productos.find((p) => p.id === productoId);
+      const neg = prod ? baseRef.current.negocios.find((n) => n.id === prod.negocioId) : undefined;
+      if (!prod || !neg) return 'No encontramos ese producto.';
+      if (neg.duenoId === id) return 'No puedes hacer pedidos en tu propio negocio.';
+      if (!neg.duenoId) return 'Este negocio todavía no usa Mercaboot, así que no recibe pedidos por aquí. Puedes llamarle o ir a verlo.';
+      if (!neg.abierto) return `«${neg.nombre}» está cerrado por ahora.`;
+      if (!neg.aceptaPedidos) return `«${neg.nombre}» no está recibiendo pedidos por ahora. Escríbele por el chat.`;
+      if (prod.precio == null) return `«${prod.nombre}» no tiene precio puesto. Pregúntalo por el chat.`;
+      const tope = disponibleParaPedir(prod);
+      if (tope <= 0) return `«${prod.nombre}» ya no está disponible.`;
+      const actual = carroRef.current && carroRef.current.uid === id ? carroRef.current : null;
+      if (actual && actual.lineas.length > 0 && actual.negocioId !== prod.negocioId && !vaciarAntes) return OTRO_NEGOCIO;
+      const lineas = actual && actual.negocioId === prod.negocioId ? actual.lineas : [];
+      const ya = lineas.find((l) => l.productoId === productoId)?.cantidad ?? 0;
+      if (!ya && lineas.length >= 30) return 'Un pedido puede llevar hasta 30 productos distintos.';
+      // La primera vez se agrega 1; después sube de a poco (medio kilo, un litro…).
+      const nueva = redondear(Math.min(tope, ya + (cantidad ?? (ya ? pasoCantidad(prod.unidad) : 1))));
+      if (nueva <= ya) return `De «${prod.nombre}» solo quedan ${cantidadTexto(tope)} ${prod.unidad}.`;
+      fijarCarro({
+        uid: id,
+        negocioId: prod.negocioId,
+        lineas: ya ? lineas.map((l) => (l.productoId === productoId ? { ...l, cantidad: nueva } : l)) : [...lineas, { productoId, cantidad: nueva }],
+      });
+      return null;
+    },
+    [fijarCarro],
+  );
+
+  const ponerCantidad = useCallback<Ctx['ponerCantidad']>(
+    (productoId, cantidad) => {
+      const id = uidRef.current;
+      const actual = carroRef.current;
+      if (!id || !actual || actual.uid !== id) return null;
+      const quitar = () => {
+        const resto = actual.lineas.filter((l) => l.productoId !== productoId);
+        fijarCarro(resto.length > 0 ? { ...actual, lineas: resto } : null);
+      };
+      const q = redondear(cantidad);
+      if (!(q > 0)) {
+        quitar();
+        return null;
+      }
+      const prod = baseRef.current.productos.find((p) => p.id === productoId);
+      const tope = prod ? disponibleParaPedir(prod) : q;
+      if (tope <= 0) {
+        quitar();
+        return prod ? `«${prod.nombre}» ya no está disponible y lo quitamos de tu carrito.` : null;
+      }
+      const final = Math.min(q, tope);
+      fijarCarro({ ...actual, lineas: actual.lineas.map((l) => (l.productoId === productoId ? { ...l, cantidad: final } : l)) });
+      return final < q && prod ? `De «${prod.nombre}» solo quedan ${cantidadTexto(tope)} ${prod.unidad}.` : null;
+    },
+    [fijarCarro],
+  );
+
+  const quitarDelCarrito = useCallback<Ctx['quitarDelCarrito']>((productoId) => void ponerCantidad(productoId, 0), [ponerCantidad]);
+  const vaciarCarrito = useCallback<Ctx['vaciarCarrito']>(() => fijarCarro(null), [fijarCarro]);
+
+  /* ───── pedidos ───── */
+
+  const crearPedido = useCallback<Ctx['crearPedido']>(
+    async (d) => {
+      const id = uidRef.current;
+      const c = carroRef.current;
+      if (!id) return { error: 'No hay una sesión activa.' };
+      if (!c || c.uid !== id || c.lineas.length === 0) return { error: 'Tu carrito está vacío.' };
+      const direccion = d.entrega === 'domicilio' ? (d.direccion ?? '').trim() : '';
+      if (d.entrega === 'domicilio' && !direccion) return { error: 'Escribe la dirección de entrega.' };
+      const { data, error } = await supabase.rpc('crear_pedido', {
+        p_negocio: c.negocioId,
+        p_items: c.lineas.map((l) => ({ producto_id: l.productoId, cantidad: redondear(l.cantidad) })),
+        p_entrega: d.entrega,
+        p_direccion: direccion || null,
+        p_pago: d.pago,
+        p_nota: (d.nota ?? '').trim() || null,
+      });
+      if (error) {
+        refrescar(); // por si cambiaron las existencias
+        return { error: textoError(error) };
+      }
+      const pedido = pedidoDeFila(data as FilaPedido);
+      propias.current.set(pedido.id, Date.now());
+      dispatch({ t: 'ped', p: pedido });
+      if (carroRef.current?.uid === id) fijarCarro(null);
+      refrescar(); // trae el chat y las existencias ya apartadas
+      return { pedido };
+    },
+    [fijarCarro, refrescar],
+  );
+
+  const accionPedido = useCallback<Ctx['accionPedido']>(
+    async (pedidoId, accion, texto) => {
+      if (!uidRef.current) return 'No hay una sesión activa.';
+      propias.current.set(pedidoId, Date.now());
+      const { data, error } = await supabase.rpc('pedido_accion', { p_pedido: pedidoId, p_accion: accion, p_texto: (texto ?? '').trim() || null });
+      propias.current.set(pedidoId, Date.now());
+      if (error) {
+        refrescar(); // quizá el pedido ya cambió (venció, lo cancelaron…)
+        return textoError(error);
+      }
+      dispatch({ t: 'ped', p: pedidoDeFila(data as FilaPedido) });
+      refrescar(); // trae el aviso del chat y las existencias
+      return null;
+    },
+    [refrescar],
+  );
+
+  const lineasDe = useCallback<Ctx['lineasDe']>(async (pedidoId) => {
+    const guardadas = lineasGuardadas.current.get(pedidoId);
+    if (guardadas) return guardadas;
+    const { data, error } = await supabase.from('detalle_pedido').select('*').eq('pedido_id', pedidoId).order('nombre', { ascending: true });
+    if (error) {
+      if (esErrorDeRed(error)) setEstadoRed('sin-internet');
+      return null;
+    }
+    const lineas = ((data ?? []) as FilaDetalle[]).map(lineaDeFila);
+    if (lineas.length > 0) lineasGuardadas.current.set(pedidoId, lineas);
+    return lineas;
+  }, []);
+
+  const datosPagoDe = useCallback<Ctx['datosPagoDe']>(async (pedidoId) => {
+    const { data, error } = await supabase.rpc('datos_pago_pedido', { p_pedido: pedidoId });
+    if (error) return null;
+    return (data as string | null) ?? null;
+  }, []);
+
+  const leerDatosPago = useCallback<Ctx['leerDatosPago']>(async () => {
+    const mio = miNegocio();
+    if (!mio) return null;
+    const { data, error } = await supabase.from('negocios_privado').select('datos_pago').eq('negocio_id', mio.id).maybeSingle();
+    if (error) return null;
+    return (data as { datos_pago: string | null } | null)?.datos_pago ?? '';
+  }, []);
+
+  const guardarDatosPago = useCallback<Ctx['guardarDatosPago']>(async (texto) => {
+    const mio = miNegocio();
+    if (!mio) return 'Tu cuenta no administra ningún negocio.';
+    const limpio = texto.trim();
+    if (limpio.length > 500) return 'Los datos de pago son muy largos (máximo 500 letras).';
+    // Primero se intenta cambiar la fila que ya existe; si todavía no hay, se crea. (Un «upsert» no sirve aquí:
+    // intentaría reescribir también la columna negocio_id y esa no se puede cambiar, a propósito.)
+    const valor = limpio || null;
+    for (let intento = 0; intento < 2; intento++) {
+      const { data, error } = await supabase.from('negocios_privado').update({ datos_pago: valor }).eq('negocio_id', mio.id).select('negocio_id');
+      if (error) return textoError(error);
+      if (data && data.length > 0) return null;
+      const { error: e2 } = await supabase.from('negocios_privado').insert({ negocio_id: mio.id, datos_pago: valor });
+      if (!e2) return null;
+      if (e2.code !== '23505') return textoError(e2); // 23505: otro teléfono la creó justo ahora → se vuelve a intentar el cambio
+    }
+    return 'No se pudieron guardar los datos de pago. Inténtalo otra vez.';
+  }, []);
+
+  /* ───── clientes frecuentes ───── */
+
+  const marcarFrecuente = useCallback<Ctx['marcarFrecuente']>(
+    async (clienteId, descuentoPct, beneficio) => {
+      const mio = miNegocio();
+      if (!mio) return 'Tu cuenta no administra ningún negocio.';
+      const { error } = await supabase.rpc('marcar_frecuente', {
+        p_cliente: clienteId,
+        p_descuento: Math.round(descuentoPct),
+        p_beneficio: (beneficio ?? '').trim() || null,
+      });
+      if (error) return textoError(error);
+      const fila = await supabase.from('clientes_frecuentes').select('*').eq('negocio_id', mio.id).eq('cliente_id', clienteId).maybeSingle();
+      if (!fila.error && fila.data) dispatch({ t: 'frec', f: frecuenteDeFila(fila.data as FilaFrecuente) });
+      refrescar(); // el aviso llega al chat del cliente
+      return null;
+    },
+    [refrescar],
+  );
+
+  const quitarFrecuente = useCallback<Ctx['quitarFrecuente']>(async (clienteId) => {
+    const mio = miNegocio();
+    if (!mio) return 'Tu cuenta no administra ningún negocio.';
+    const { error } = await supabase.rpc('quitar_frecuente', { p_cliente: clienteId });
+    if (error) return textoError(error);
+    const fila = baseRef.current.frecuentes.find((f) => f.negocioId === mio.id && f.clienteId === clienteId);
+    if (fila) dispatch({ t: 'frecDel', id: fila.id });
+    return null;
+  }, []);
+
   /* ───── contexto ───── */
 
   const ready = sesionLeida && (!uid || localListo);
@@ -1112,7 +1550,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       cuenta,
       negocio,
       favoritos,
-      seguidores,
+      numFrecuentes,
+      pedidosPendientes,
       estadoRed,
       aviso,
       chatsSinLeer,
@@ -1140,12 +1579,26 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       enviarComoCliente,
       enviarComoNegocio,
       marcarLeida,
+      carrito,
+      agregarAlCarrito,
+      ponerCantidad,
+      quitarDelCarrito,
+      vaciarCarrito,
+      crearPedido,
+      accionPedido,
+      lineasDe,
+      datosPagoDe,
+      leerDatosPago,
+      guardarDatosPago,
+      marcarFrecuente,
+      quitarFrecuente,
     }),
     [
-      ready, datos, cuenta, negocio, favoritos, seguidores, estadoRed, aviso, chatsSinLeer, refrescar, negociosLibres, registrar, entrar, salir,
-      cambiarModo, comprobarReclamo, abrirNegocio, soltarNegocio, recuperarPassword, restablecerPassword, actualizarCuenta, cambiarPassword,
-      actualizarNegocio, toggleFavorito, agregarProducto, editarProducto, eliminarProducto, setDisponible, mensajesDe, observarChat,
-      enviarComoCliente, enviarComoNegocio, marcarLeida,
+      ready, datos, cuenta, negocio, favoritos, numFrecuentes, pedidosPendientes, estadoRed, aviso, chatsSinLeer, refrescar, negociosLibres, registrar,
+      entrar, salir, cambiarModo, comprobarReclamo, abrirNegocio, soltarNegocio, recuperarPassword, restablecerPassword, actualizarCuenta,
+      cambiarPassword, actualizarNegocio, toggleFavorito, agregarProducto, editarProducto, eliminarProducto, setDisponible, mensajesDe,
+      observarChat, enviarComoCliente, enviarComoNegocio, marcarLeida, carrito, agregarAlCarrito, ponerCantidad, quitarDelCarrito, vaciarCarrito,
+      crearPedido, accionPedido, lineasDe, datosPagoDe, leerDatosPago, guardarDatosPago, marcarFrecuente, quitarFrecuente,
     ],
   );
 

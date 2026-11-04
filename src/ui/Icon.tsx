@@ -69,6 +69,10 @@ const ICONS = {
   next: { paths: ['m9 18 6-6-6-6'] },
   image: { paths: ['M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z', 'm21 15-5-5L5 21'], circles: [[8.5, 8.5, 1.5]] },
   locate: { paths: ['M12 2v4', 'M12 18v4', 'M2 12h4', 'M18 12h4'], circles: [[12, 12, 6]] },
+  cart: { paths: ['M2 3h2.6l2.1 10.4a2 2 0 0 0 2 1.6h8.6a2 2 0 0 0 2-1.5L21 7H5.4'], circles: [[9.5, 19.5, 1.3], [17.5, 19.5, 1.3]] },
+  minus: { paths: ['M5 12h14'] },
+  receipt: { paths: ['M6 2h12v20l-3-2-3 2-3-2-3 2z', 'M9 7h6', 'M9 11h6', 'M9 15h3'] },
+  users: { paths: ['M2 21a6 6 0 0 1 12 0', 'M16 3.2a4 4 0 0 1 0 7.6', 'M22 21a6 6 0 0 0-4-5.6'], circles: [[8, 8, 4]] },
 } satisfies Record<string, Def>;
 
 export type IconName = keyof typeof ICONS;

@@ -25,3 +25,10 @@ export function haceCuanto(ms: number, ahora = Date.now()) {
   if (dias < 30) return `hace ${dias} días`;
   return fechaCorta(ms);
 }
+
+/** «4:35 pm» */
+export function horaCorta(ms: number) {
+  const d = new Date(ms);
+  const h = d.getHours();
+  return `${h % 12 === 0 ? 12 : h % 12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
+}
