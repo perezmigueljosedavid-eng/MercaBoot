@@ -624,3 +624,7 @@ on conflict (negocio_id) do nothing;
 -- Por si el esquema ya estaba instalado: las tiendas con código de reclamo quedan marcadas como del directorio.
 update public.negocios n set del_directorio = true
 where exists (select 1 from public.negocios_reclamo r where r.negocio_id = n.id) and not n.del_directorio;
+
+-- ───────────────────────────── 8. AVISAR A LA API ─────────────────────────────
+-- Supabase ya recarga su API solo después de cada cambio; esto lo pide de nuevo por si acaso.
+notify pgrst, 'reload schema';
