@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
-import { SEMILLA_NEGOCIOS } from '../../data/semilla';
 import { useStore } from '../../store';
 import { Confirmar } from '../../ui/Dialogo';
 import { Icon, IconName } from '../../ui/Icon';
@@ -46,7 +45,7 @@ export default function PerfilComerciante() {
   const [error, setError] = useState('');
   if (!cuenta || !negocio) return null;
   // Un negocio del directorio vuelve a la lista sin dueño; uno que la persona creó desaparece
-  const delDirectorio = SEMILLA_NEGOCIOS.some((x) => x.id === negocio.id);
+  const delDirectorio = !!negocio.delDirectorio;
 
   return (
     <Screen contentStyle={{ gap: 20, paddingTop: 16, paddingHorizontal: 20, paddingBottom: 24 }}>
@@ -157,9 +156,9 @@ export default function PerfilComerciante() {
         confirmar={delDirectorio ? 'Sí, soltarlo' : 'Sí, dejar mi negocio'}
         peligro
         onCancelar={() => setConfirmando(false)}
-        onConfirmar={() => {
+        onConfirmar={async () => {
           setConfirmando(false);
-          const err = soltarNegocio();
+          const err = await soltarNegocio();
           if (err) return setError(err);
           router.replace('/cliente');
         }}

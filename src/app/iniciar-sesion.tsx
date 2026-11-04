@@ -7,7 +7,7 @@ import { T } from '../ui/T';
 import { C } from '../ui/theme';
 
 export default function IniciarSesion() {
-  const { entrar, s } = useStore();
+  const { entrar } = useStore();
   const [correo, setCorreo] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -25,8 +25,8 @@ export default function IniciarSesion() {
       setError(err);
       return;
     }
-    const c = s.cuentas.find((x) => x.correo === correo.trim().toLowerCase());
-    router.replace(c?.rol === 'comerciante' ? '/comerciante' : '/cliente');
+    // La pantalla de inicio manda a cada cuenta a su modo (cliente o comerciante).
+    router.replace('/');
   }
 
   return (
@@ -40,7 +40,7 @@ export default function IniciarSesion() {
             Bienvenido de nuevo
           </T>
           <T size={15} color={C.muted}>
-            Entra con tu correo y contraseña.
+            Entra con tu correo y contraseña. Tus datos y tus chats están en la nube: los verás igual en cualquier teléfono.
           </T>
         </View>
         <Field

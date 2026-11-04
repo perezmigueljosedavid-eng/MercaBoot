@@ -150,7 +150,7 @@ export default function Registro() {
         <View style={{ flex: 1, minHeight: 8 }} />
         <Btn label={cargando ? 'Creando…' : 'Crear cuenta'} onPress={cargando ? undefined : crear} />
         <T size={12} lh={1.4} color={C.muted} style={{ textAlign: 'center' }}>
-          Por ahora tus datos se guardan solo en este teléfono y no se comparten con nadie.
+          Tu cuenta se guarda en la nube de Mercaboot: puedes entrar desde cualquier teléfono con tu correo y tu contraseña.
         </T>
       </View>
 

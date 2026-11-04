@@ -5,6 +5,7 @@ import { FotoCampo } from '../ui/FotoCampo';
 import { GiroCampo } from '../ui/GiroCampo';
 import { BackBtn, Btn, Card, Field, goBack, Screen, Toggle } from '../ui/kit';
 import { T } from '../ui/T';
+import { UbicacionCampo, type DatosUbicacion } from '../ui/UbicacionCampo';
 import { C } from '../ui/theme';
 
 /** Todo lo que el comerciante puede cambiar de su negocio. */
@@ -19,9 +20,15 @@ export default function EditarNegocio() {
   const [horario, setHorario] = useState(negocio?.horario ?? '');
   const [aDomicilio, setADomicilio] = useState(negocio?.aDomicilio ?? false);
   const [zona, setZona] = useState(negocio?.zonaEntrega ?? '');
-  const [direccion, setDireccion] = useState(negocio?.direccion ?? '');
+  const [ubic, setUbic] = useState<DatosUbicacion>({
+    direccion: negocio?.direccion ?? '',
+    lat: negocio?.lat,
+    lng: negocio?.lng,
+    mapsUrl: negocio?.mapsUrl,
+  });
   const [error, setError] = useState('');
   const [guardado, setGuardado] = useState(false);
+  const [guardando, setGuardando] = useState(false);
 
   if (!negocio) return null;
 
@@ -31,12 +38,13 @@ export default function EditarNegocio() {
     setGuardado(false);
   };
 
-  function guardar() {
+  async function guardar() {
     if (!nombre.trim()) return setError('Escribe el nombre del negocio.');
     if (!giro.trim()) return setError('Escribe qué tipo de negocio es.');
     if (telefono.trim() && !telefonoValido(telefono)) return setError('El teléfono debe tener 10 dígitos.');
     if (correo.trim() && !correoValido(correo)) return setError('Escribe un correo válido o déjalo vacío.');
-    const err = actualizarNegocio({
+    setGuardando(true);
+    const err = await actualizarNegocio({
       logoUri: logo,
       nombre,
       giro: giro.trim(),
@@ -46,8 +54,12 @@ export default function EditarNegocio() {
       horario: horario.trim() || undefined,
       aDomicilio,
       zonaEntrega: aDomicilio ? zona.trim() || undefined : undefined,
-      direccion: direccion.trim() || undefined,
+      direccion: ubic.direccion.trim() || undefined,
+      lat: ubic.lat,
+      lng: ubic.lng,
+      mapsUrl: ubic.mapsUrl,
     });
+    setGuardando(false);
     if (err) return setError(err);
     setGuardado(true);
     goBack('/comerciante/perfil');
@@ -115,12 +127,17 @@ export default function EditarNegocio() {
           <T size={16} weight={700}>
             ¿Dónde estás?
           </T>
-          <Field
-            label="Dirección o referencia"
-            placeholder="Ej. Calle Hidalgo 12, frente a la iglesia"
-            value={direccion}
-            onChangeText={tocar(setDireccion)}
-            autoCapitalize="sentences"
+          <T size={12} lh={1.4} color={C.muted} style={{ marginTop: -8 }}>
+            Así los clientes ven qué tan cerca estás y pueden pedir indicaciones para llegar.
+          </T>
+          <UbicacionCampo
+            value={ubic}
+            nombre={nombre || negocio.nombre}
+            onChange={(u) => {
+              setUbic(u);
+              setError('');
+              setGuardado(false);
+            }}
           />
         </Card>
 
@@ -134,7 +151,7 @@ export default function EditarNegocio() {
             Guardado.
           </T>
         ) : null}
-        <Btn label="Guardar cambios" onPress={guardar} />
+        <Btn label={guardando ? 'Guardando…' : 'Guardar cambios'} onPress={guardando ? undefined : guardar} />
       </View>
     </Screen>
   );

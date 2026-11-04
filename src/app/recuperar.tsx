@@ -1,25 +1,23 @@
 import React, { useState } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
-import { useStore } from '../store';
+import { correoValido, useStore } from '../store';
 import { BackBtn, Btn, Field, Screen } from '../ui/kit';
 import { T } from '../ui/T';
 import { C } from '../ui/theme';
 
-/** Cambiar la contraseña comprobando el correo y el teléfono con los que se creó la cuenta. */
+/** Manda al correo un enlace para escribir una contraseña nueva. */
 export default function Recuperar() {
   const { recuperarPassword } = useStore();
   const [correo, setCorreo] = useState('');
-  const [telefono, setTelefono] = useState('');
-  const [nueva, setNueva] = useState('');
   const [error, setError] = useState('');
   const [listo, setListo] = useState(false);
   const [cargando, setCargando] = useState(false);
 
   async function enviar() {
-    if (!correo.trim() || !telefono.trim() || !nueva) return setError('Llena todos los campos.');
+    if (!correoValido(correo)) return setError('Escribe el correo con el que creaste tu cuenta.');
     setCargando(true);
-    const err = await recuperarPassword(correo, telefono, nueva);
+    const err = await recuperarPassword(correo);
     setCargando(false);
     if (err) return setError(err);
     setListo(true);
@@ -36,20 +34,20 @@ export default function Recuperar() {
             Recupera tu contraseña
           </T>
           <T size={15} lh={1.45} color={C.muted}>
-            Escribe el correo y el teléfono con los que creaste tu cuenta, y elige una contraseña nueva.
+            Escribe el correo con el que creaste tu cuenta. Te enviaremos un enlace para elegir una contraseña nueva.
           </T>
         </View>
         {listo ? (
           <>
             <View style={{ padding: 16, borderRadius: 14, backgroundColor: C.greenTint, gap: 4 }}>
               <T size={15} weight={700} color={C.greenDark}>
-                Listo, cambiamos tu contraseña
+                Revisa tu correo
               </T>
               <T size={14} lh={1.4} color={C.greenDark}>
-                Ya puedes entrar con la contraseña nueva.
+                Si ese correo tiene una cuenta, te enviamos un enlace. Ábrelo desde este teléfono y escribe tu contraseña nueva. Si no llega en unos minutos, revisa la carpeta de spam.
               </T>
             </View>
-            <Btn label="Ir a iniciar sesión" onPress={() => router.replace('/iniciar-sesion')} />
+            <Btn label="Volver a iniciar sesión" onPress={() => router.replace('/iniciar-sesion')} />
           </>
         ) : (
           <>
@@ -64,27 +62,6 @@ export default function Recuperar() {
                 setCorreo(t);
                 setError('');
               }}
-            />
-            <Field
-              label="Teléfono"
-              placeholder="10 dígitos"
-              keyboardType="phone-pad"
-              value={telefono}
-              onChangeText={(t) => {
-                setTelefono(t);
-                setError('');
-              }}
-            />
-            <Field
-              label="Contraseña nueva"
-              placeholder="Mínimo 8 caracteres"
-              secureTextEntry
-              autoCapitalize="none"
-              value={nueva}
-              onChangeText={(t) => {
-                setNueva(t);
-                setError('');
-              }}
               onSubmitEditing={enviar}
             />
             {error ? (
@@ -92,7 +69,7 @@ export default function Recuperar() {
                 {error}
               </T>
             ) : null}
-            <Btn label={cargando ? 'Cambiando…' : 'Cambiar contraseña'} onPress={cargando ? undefined : enviar} />
+            <Btn label={cargando ? 'Enviando…' : 'Enviarme el enlace'} onPress={cargando ? undefined : enviar} />
           </>
         )}
       </View>

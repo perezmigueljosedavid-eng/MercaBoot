@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
-import { useStore } from '../../store';
+import { useStore, type EstadoRed } from '../../store';
 import { haceCuanto, textoPrecio } from '../../ui/bits';
 import { Card, Group, Screen, SectionTitle, Toggle } from '../../ui/kit';
 import { Logo } from '../../ui/Logo';
@@ -21,15 +21,36 @@ function Cifra({ valor, etiqueta, color = C.ink }: { valor: string; etiqueta: st
   );
 }
 
+/** Dice si lo que publicas llega al instante a los teléfonos de tus clientes. */
+function EstadoEnVivo({ estado }: { estado: EstadoRed }) {
+  const [texto, color, fondo] =
+    estado === 'en-vivo'
+      ? ['En vivo', C.greenDark, C.greenTint]
+      : estado === 'sin-internet'
+        ? ['Sin internet', C.amberDeep, C.amberTint]
+        : ['Conectando', C.greyText, C.grey];
+  return (
+    <View
+      accessibilityLabel={`Conexión: ${texto}`}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 28, paddingHorizontal: 10, borderRadius: 14, backgroundColor: fondo }}
+    >
+      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: estado === 'en-vivo' ? C.green : color }} />
+      <T size={12} weight={700} color={color}>
+        {texto}
+      </T>
+    </View>
+  );
+}
+
 export default function HomeComerciante() {
-  const { s, negocio, actualizarNegocio, setDisponible, cuenta } = useStore();
+  const { s, negocio, actualizarNegocio, setDisponible, cuenta, seguidores, chatsSinLeer, estadoRed } = useStore();
   if (!negocio || !cuenta) return null;
 
   const propios = s.productos.filter((p) => p.negocioId === negocio.id);
   const disponibles = propios.filter((p) => p.disponible).length;
   const agotados = propios.length - disponibles;
   const vacio = propios.length === 0;
-  const faltaPerfil = !negocio.direccion;
+  const faltaPerfil = !negocio.direccion && negocio.lat === undefined;
 
   return (
     <Screen contentStyle={{ gap: 22, paddingTop: 16, paddingHorizontal: 20, paddingBottom: 24 }}>
@@ -44,6 +65,7 @@ export default function HomeComerciante() {
             {negocio.nombre}
           </T>
         </View>
+        <EstadoEnVivo estado={estadoRed} />
       </View>
 
       {/* estado */}
@@ -66,7 +88,7 @@ export default function HomeComerciante() {
               Completa dónde está tu negocio
             </T>
             <T size={13} lh={1.4} color={C.amberDeep}>
-              Agrega tu dirección o una referencia para que los clientes te encuentren. Toca aquí.
+              Agrega tu dirección y tu ubicación para que los clientes te encuentren y vean qué tan cerca estás. Toca aquí.
             </T>
           </Card>
         </Pressable>
@@ -76,6 +98,10 @@ export default function HomeComerciante() {
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
         <Cifra valor={String(disponibles)} etiqueta="Productos disponibles" />
         <Cifra valor={String(agotados)} etiqueta="Agotados" color={agotados ? C.red : C.ink} />
+        <Cifra valor={String(seguidores)} etiqueta={seguidores === 1 ? 'Cliente frecuente' : 'Clientes frecuentes'} />
+        <Pressable accessibilityRole="button" accessibilityLabel="Abrir chats" onPress={() => router.navigate('/comerciante/chats')} style={{ flexBasis: '48%', flexGrow: 1 }}>
+          <Cifra valor={String(chatsSinLeer)} etiqueta={chatsSinLeer === 1 ? 'Chat sin leer' : 'Chats sin leer'} color={chatsSinLeer ? C.red : C.ink} />
+        </Pressable>
       </View>
 
       {/* productos */}

@@ -8,13 +8,14 @@ import { Icon } from '../../ui/Icon';
 import { Chip, Screen, SectionTitle } from '../../ui/kit';
 import { NegocioCard } from '../../ui/NegocioCard';
 import { T } from '../../ui/T';
+import { UbicacionBanner } from '../../ui/UbicacionBanner';
 import { C, FONT } from '../../ui/theme';
 
 export default function HomeCliente() {
   const { cuenta, favoritos } = useStore();
   const lista = useNegociosOrdenados();
   const [cat, setCat] = useState('Todos');
-  const [vista, setVista] = useState<VistaTiendas>('todas');
+  const [vista, setVista] = useState<VistaTiendas>('cerca');
   const [busqueda, setBusqueda] = useState('');
 
   const categorias = useMemo(() => ['Todos', ...Array.from(new Set(lista.map((d) => chipDeGiro(d.n.giro))))], [lista]);
@@ -64,6 +65,8 @@ export default function HomeCliente() {
           style={{ flex: 1, minWidth: 0, fontFamily: FONT[400], fontSize: 15, color: C.ink, padding: 0 }}
         />
       </View>
+
+      <UbicacionBanner />
 
       {/* tiendas */}
       <View style={{ gap: 12 }}>

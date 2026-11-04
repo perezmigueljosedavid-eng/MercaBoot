@@ -37,6 +37,7 @@ export default function ProductoForm() {
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');
   const [confirmar, setConfirmar] = useState(false);
+  const [guardando, setGuardando] = useState(false);
 
   if (id && !previo) {
     return (
@@ -56,14 +57,16 @@ export default function ProductoForm() {
     return Number.isFinite(n) && n >= 0 ? n : null;
   }
 
-  function guardar(otro: boolean) {
+  async function guardar(otro: boolean) {
     const monto = leerPrecio();
     if (!nombre.trim()) return setError('Escribe el nombre del producto.');
     if (monto === null) return setError('El precio debe ser un número, por ejemplo 45 o 12.50.');
     const unidadFinal = unidad === UNIDAD_OTRA ? unidadOtra.trim() : unidad;
     if (!unidadFinal) return setError('Escribe cómo se vende, por ejemplo «charola» o «vaso de 1 litro».');
     const datos = { nombre, precio: monto, unidad: unidadFinal, disponible, porEncargo, categoria };
-    const err = previo ? editarProducto(previo.id, datos) : agregarProducto(datos);
+    setGuardando(true);
+    const err = previo ? await editarProducto(previo.id, datos) : await agregarProducto(datos);
+    setGuardando(false);
     if (err) return setError(err);
     if (otro && !previo) {
       setAviso(`Guardamos «${nombre.trim()}». Escribe el siguiente producto.`);
@@ -161,8 +164,8 @@ export default function ProductoForm() {
         ) : null}
 
         <View style={{ gap: 10 }}>
-          <Btn label={previo ? 'Guardar cambios' : 'Guardar'} onPress={() => guardar(false)} />
-          {!previo ? <Btn label="Guardar y agregar otro" variant="outline" onPress={() => guardar(true)} /> : null}
+          <Btn label={guardando ? 'Guardando…' : previo ? 'Guardar cambios' : 'Guardar'} onPress={guardando ? undefined : () => guardar(false)} />
+          {!previo ? <Btn label="Guardar y agregar otro" variant="outline" onPress={guardando ? undefined : () => guardar(true)} /> : null}
           {previo ? <Btn label="Eliminar producto" variant="danger" onPress={() => setConfirmar(true)} /> : null}
         </View>
       </View>
@@ -174,9 +177,12 @@ export default function ProductoForm() {
         confirmar="Eliminar"
         peligro
         onCancelar={() => setConfirmar(false)}
-        onConfirmar={() => {
-          if (previo) eliminarProducto(previo.id);
+        onConfirmar={async () => {
           setConfirmar(false);
+          if (previo) {
+            const err = await eliminarProducto(previo.id);
+            if (err) return setError(err);
+          }
           goBack('/comerciante/productos');
         }}
       />

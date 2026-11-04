@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { nombreCategoria } from '../../data/contenido';
+import { etiquetaDistancia } from '../../lib/geo';
+import { useUbicacion } from '../../lib/ubicacion';
 import { buscarNegocios, buscarProductos, useNegociosOrdenados } from '../../lib/usarDatos';
 import { useStore } from '../../store';
 import { textoPrecio } from '../../ui/bits';
@@ -15,6 +17,7 @@ import { C, FONT } from '../../ui/theme';
 export default function Buscar() {
   const params = useLocalSearchParams<{ q?: string }>();
   const { s, favoritos } = useStore();
+  const { coords } = useUbicacion();
   const negocios = useNegociosOrdenados();
   const [q, setQ] = useState(params.q ?? '');
   const [disponible, setDisponible] = useState(false);
@@ -30,11 +33,11 @@ export default function Buscar() {
   const consulta = q.trim();
 
   const productos = useMemo(() => {
-    let lista = consulta ? buscarProductos(consulta, s.productos, s.negocios) : [];
+    let lista = consulta ? buscarProductos(consulta, s.productos, s.negocios, coords) : [];
     if (disponible) lista = lista.filter((r) => r.p.disponible);
     if (domicilio) lista = lista.filter((r) => r.n.aDomicilio);
     return lista;
-  }, [consulta, s.productos, s.negocios, disponible, domicilio]);
+  }, [consulta, s.productos, s.negocios, coords, disponible, domicilio]);
 
   const tiendas = useMemo(() => {
     let lista = consulta ? buscarNegocios(consulta, negocios) : negocios;
@@ -98,7 +101,7 @@ export default function Buscar() {
                   : 'Las tiendas todavía no han publicado productos. En cuanto lo hagan, los verás aquí.'}
               </T>
             ) : (
-              productos.map(({ p, n }) => (
+              productos.map(({ p, n, dist }) => (
                 <Pressable
                   key={p.id}
                   accessibilityRole="button"
@@ -121,7 +124,7 @@ export default function Buscar() {
                       {p.nombre}
                     </T>
                     <T size={13} color={C.muted} numberOfLines={2}>
-                      {[n.nombre, n.direccion].filter(Boolean).join(' · ')}
+                      {[n.nombre, etiquetaDistancia(dist) ?? n.direccion].filter(Boolean).join(' · ')}
                     </T>
                     <T size={13} weight={600}>
                       {textoPrecio(p.precio, p.unidad)} <T size={12} color={C.muted}>· {nombreCategoria(p.categoria)}</T>

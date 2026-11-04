@@ -10,12 +10,17 @@ import { C } from '../ui/theme';
 const CLIENTES: [string, string][] = [
   ['¿Cómo busco un producto o un negocio?', 'En el inicio o en la pestaña «Buscar» escribe lo que necesitas, por ejemplo «pollo» o «tortillas». Verás los productos que publicaron las tiendas y los negocios que coinciden. Con «Disponible ahora» y «A domicilio» afinas la lista.'],
   ['Un negocio no tiene productos', 'Algunos negocios de la comunidad aparecen en el directorio pero todavía no usan Mercaboot. Cuando su dueño se registre, publicará lo que tiene.'],
-  ['¿Qué es «Cliente frecuente»?', 'Es tu lista de negocios de siempre. Abre un negocio, toca «Cliente frecuente» y lo encontrarás en la pestaña Favoritos.'],
+  ['¿Qué es «Cliente frecuente»?', 'Es tu lista de negocios de siempre. Abre un negocio, toca «Cliente frecuente» y lo encontrarás en la pestaña Favoritos. El dueño del negocio también ve cuántos clientes frecuentes tiene.'],
+  ['¿Cómo le escribo a un negocio?', 'Abre el negocio y toca «Chatear» (o tócalo en la lista). Escribe tu mensaje o usa una respuesta rápida, como «¿Qué hay hoy?». Tus conversaciones quedan en la pestaña «Chats» y te avisamos con un número rojo cuando te contesten. Solo se puede chatear con los negocios que ya usan Mercaboot.'],
+  ['¿Por qué piden mi ubicación?', 'Para mostrarte primero los negocios más cercanos y decirte a qué distancia están. Tu ubicación se usa solo en tu teléfono: no se guarda ni se envía a nadie. Si no quieres darla, la app funciona igual, solo que sin distancias.'],
+  ['¿Los productos se actualizan solos?', 'Sí. Cuando un comerciante publica algo, lo cambia o marca que ya se acabó, lo ves en tu teléfono en unos segundos, sin tener que cerrar la app. Si pierdes el internet verás lo último que se guardó.'],
   ['¿Y si también quiero vender?', 'No necesitas otra cuenta. En tu perfil toca «Abrir mi negocio»: sigues comprando como cliente y cambias de modo cuando quieras. Si tu negocio ya aparece en la lista de la comunidad, para reclamarlo necesitas el código que el equipo de Mercaboot le da a su dueño.'],
 ];
 
 const COMERCIANTES: [string, string][] = [
-  ['¿Cómo publico lo que vendo?', 'En «Productos» toca «Agregar producto» y escribe lo que quieras: nombre, precio y unidad. Con el interruptor marcas si hay o ya se acabó, y puedes cambiarlo en cualquier momento.'],
+  ['¿Cómo publico lo que vendo?', 'En «Productos» toca «Agregar producto» y escribe lo que quieras: nombre, precio y unidad. Con el interruptor marcas si hay o ya se acabó, y puedes cambiarlo en cualquier momento. Tus clientes lo ven en sus teléfonos en cuanto lo guardas.'],
+  ['¿Cómo respondo a mis clientes?', 'Cuando un cliente te escribe, aparece un número rojo en la pestaña «Chats». Ábrela, toca la conversación y contesta con tu mensaje o con una respuesta rápida («Sí hay», «Ya se acabó», «Llega mañana»).'],
+  ['¿Cómo pongo mi ubicación?', 'En «Perfil» → «Editar mi negocio», en la sección «¿Dónde estás?», toca «Usar mi ubicación actual» estando en tu negocio, o pega el enlace de Google Maps. Así tus clientes ven qué tan cerca estás y pueden pedir indicaciones.'],
   ['¿Cómo reclamo un negocio que ya aparece en la lista?', 'Tócalo y escribe su código de reclamo: un código secreto de 12 letras y números (como K7M2-9QXP-4HWD) que el equipo de Mercaboot entrega solo al dueño. Sin ese código nadie puede quedarse con tu tienda, ni por error. Antes de terminar, la app te pregunta «¿Es tu negocio?» y puedes elegir «No, volver». Si tu negocio no está en la lista, elige «Mi negocio es nuevo».'],
   ['Reclamé un negocio por error', 'En tu perfil, hasta abajo, toca «Dejar de administrar este negocio». Tu cuenta sigue como cliente y la tienda vuelve a la lista sin dueño, lista para que su verdadero dueño la reclame con su código.'],
   ['¿Puedo cambiar mi logo y mis datos?', 'Sí. En «Perfil» → «Editar mi negocio» cambias logo, nombre, teléfono, correo, horario, dirección y todo lo demás cuando quieras.'],
@@ -61,7 +66,7 @@ export default function Ayuda() {
             Mercaboot es para tu comunidad
           </T>
           <T size={13} lh={1.45} color={C.greenDark}>
-            Hecho para los negocios de {COMUNIDAD}. Mientras la app no tenga un servidor en la nube, tus datos se guardan en este teléfono.
+            Hecho para los negocios de {COMUNIDAD}. Tu cuenta, tu negocio, tus productos y tus chats se guardan en la nube, así que se ven al instante en los teléfonos de los demás.
           </T>
         </Card>
       </View>

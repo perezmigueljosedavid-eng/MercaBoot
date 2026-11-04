@@ -1,21 +1,28 @@
 import React from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
+import { abrirMapas, etiquetaDistancia } from '../lib/geo';
 import type { NegocioConDatos } from '../lib/usarDatos';
 import { Logo } from './Logo';
 import { Btn, Card, OpenDot, Tag } from './kit';
 import { T } from './T';
 import { C } from './theme';
 
-/** Tarjeta de un negocio con sus existencias y el botón para ver sus productos. */
+/** Tarjeta de un negocio con su distancia, sus existencias y los botones para verlo, chatear o llegar. */
 export function NegocioCard({ d, frecuente = false }: { d: NegocioConDatos; frecuente?: boolean }) {
   const { n } = d;
   const reclamado = !!n.duenoId;
-  const subtitulo = [n.giro, n.direccion].filter(Boolean).join(' · ');
+  const dist = etiquetaDistancia(d.dist);
+  const subtitulo = [n.giro, dist ?? n.direccion].filter(Boolean).join(' · ');
 
   return (
     <Card style={{ gap: 12, padding: 14 }}>
-      <View style={{ flexDirection: 'row', gap: 12 }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Abrir ${n.nombre}`}
+        onPress={() => router.push(`/negocio/${n.id}`)}
+        style={{ flexDirection: 'row', gap: 12 }}
+      >
         <Logo uri={n.logoUri} nombre={n.nombre} size={72} r={14} />
         <View style={{ flex: 1, gap: 4, minWidth: 0 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -49,16 +56,24 @@ export function NegocioCard({ d, frecuente = false }: { d: NegocioConDatos; frec
             ) : null}
           </View>
         </View>
+      </Pressable>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <Btn
+          label={reclamado ? 'Ver productos' : 'Ver negocio'}
+          variant="outline"
+          h={44}
+          r={12}
+          size={14}
+          weight={600}
+          flex={1}
+          onPress={() => router.push(`/negocio/${n.id}`)}
+        />
+        {reclamado ? (
+          <Btn label="Chatear" h={44} r={12} size={14} weight={600} flex={1} onPress={() => router.push(`/chat-negocio/${n.id}`)} />
+        ) : (
+          <Btn label="Cómo llegar" h={44} r={12} size={14} weight={600} flex={1} onPress={() => abrirMapas(n)} />
+        )}
       </View>
-      <Btn
-        label={reclamado ? 'Ver productos' : 'Ver negocio'}
-        variant="outline"
-        h={44}
-        r={12}
-        size={14}
-        weight={600}
-        onPress={() => router.push(`/negocio/${n.id}`)}
-      />
     </Card>
   );
 }

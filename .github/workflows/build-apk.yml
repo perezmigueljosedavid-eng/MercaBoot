@@ -1,9 +1,13 @@
 name: Construir APK
 
 # Arma el APK de Android en los servidores de GitHub (no hace falta Android Studio).
-# Se ejecuta solo al subir cambios que incluyan el archivo «disparador-apk.txt» (la primera vez que subes el proyecto),
-# o a mano: pestaña Actions → Construir APK → Run workflow.
-# Resultado: Releases → «Mercaboot · Avance 1 (APK de prueba)». También queda como «artifact» de la corrida.
+# Se ejecuta solo al subir cambios que incluyan el archivo «disparador-apk.txt», o a mano:
+# pestaña Actions → Construir APK → Run workflow.
+# Resultado: Releases → «Mercaboot · Avance 2 (APK de prueba)». También queda como «artifact» de la corrida.
+#
+# Antes de compilar se revisa src/config.ts (scripts/revisar-config.cjs):
+#   · con los datos de ejemplo (REEMPLAZA-ESTO) el APK sale de PRUEBA, sin base de datos, y NO se publica en Releases;
+#   · si ahí hay una llave secreta (service_role / secret) la corrida se detiene: esa llave jamás va dentro de la app.
 on:
   workflow_dispatch:
   push:
@@ -39,6 +43,10 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      - name: Revisar la conexión con la base de datos (src/config.ts)
+        id: nube
+        run: node scripts/revisar-config.cjs 2>&1 | tee -a build.log
+
       # El servidor de GitHub ya trae el SDK de Android; solo hay que aceptar las licencias.
       - name: Aceptar las licencias de Android
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
@@ -73,41 +81,44 @@ jobs:
 
       - name: Renombrar el APK
         id: apk
-        run: cp android/app/build/outputs/apk/release/app-release.apk Mercaboot-avance1.apk
+        run: cp android/app/build/outputs/apk/release/app-release.apk Mercaboot-avance2.apk
 
       - name: Revisar el APK (firma, paquete y permisos)
         continue-on-error: true
         run: |
           BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
           {
-            ls -l Mercaboot-avance1.apk
+            ls -l Mercaboot-avance2.apk
             echo "== apksigner =="
-            "$BT/apksigner" verify --verbose --print-certs Mercaboot-avance1.apk | head -12
+            "$BT/apksigner" verify --verbose --print-certs Mercaboot-avance2.apk | head -12
             echo "== aapt2 =="
-            "$BT/aapt2" dump badging Mercaboot-avance1.apk | grep -E "^package|sdkVersion|targetSdkVersion|uses-permission|application-label:|native-code" || true
+            "$BT/aapt2" dump badging Mercaboot-avance2.apk | grep -E "^package|sdkVersion|targetSdkVersion|uses-permission|application-label:|native-code" || true
           } 2>&1 | tee info-apk.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Mercaboot-avance1-apk
-          path: Mercaboot-avance1.apk
+          name: ${{ steps.nube.outputs.lista == 'true' && 'Mercaboot-avance2-apk' || 'Mercaboot-avance2-PRUEBA-sin-base-de-datos-apk' }}
+          path: Mercaboot-avance2.apk
 
       - name: Publicar el APK en Releases
         id: release
+        if: steps.nube.outputs.lista == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete avance1-apk --cleanup-tag --yes || true
-          gh release create avance1-apk Mercaboot-avance1.apk \
+          gh release delete avance2-apk --cleanup-tag --yes || true
+          gh release create avance2-apk Mercaboot-avance2.apk \
             --target "${{ github.sha }}" \
-            --title "Mercaboot · Avance 1 (APK de prueba)" \
-            --notes "APK de prueba del Avance 1 (inicios de sesión y la interfaz de cliente y de comerciante). Descárgalo desde un celular Android y ábrelo para instalar. Si Android avisa que bloquea la instalación, permite instalar apps desde esta fuente (Configuración → Instalar apps desconocidas). Si aparece Play Protect, toca Instalar de todos modos. Corrida #${{ github.run_number }}, commit ${{ github.sha }}."
+            --title "Mercaboot · Avance 2 (APK de prueba)" \
+            --notes "APK de prueba del Avance 2: base de datos en la nube con cambios en tiempo real (lo que publica un comerciante lo ve el cliente al instante y al revés), ubicación y distancias, y chat entre cliente y comerciante. Descárgalo desde un celular Android y ábrelo para instalar; necesita internet. Si Android avisa que bloquea la instalación, permite instalar apps desde esta fuente (Configuración → Instalar apps desconocidas). Si aparece Play Protect, toca Instalar de todos modos. Corrida #${{ github.run_number }}, commit ${{ github.sha }}."
 
       - name: Guardar cómo terminó la corrida (rama «build-log»)
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
           RESULTADO: ${{ job.status }}
+          P_NUBE: ${{ steps.nube.outcome }}
+          CONFIG_LISTA: ${{ steps.nube.outputs.lista }}
           P_INSTALAR: ${{ steps.instalar.outcome }}
           P_ICONOS: ${{ steps.iconos.outcome }}
           P_TIPOS: ${{ steps.tipos.outcome }}
@@ -119,10 +130,13 @@ jobs:
           d="$(mktemp -d)"
           {
             echo "resultado: $RESULTADO"
+            echo "avance: 2"
             echo "corrida: ${{ github.run_number }}"
             echo "commit: ${{ github.sha }}"
+            echo "rama: ${{ github.ref_name }}"
             date -u +"fecha: %Y-%m-%dT%H:%M:%SZ"
-            echo "pasos: instalar=$P_INSTALAR iconos=$P_ICONOS tipos=$P_TIPOS prebuild=$P_PREBUILD gradle=$P_GRADLE apk=$P_APK release=$P_RELEASE"
+            echo "config-lista: ${CONFIG_LISTA:-no}"
+            echo "pasos: nube=$P_NUBE instalar=$P_INSTALAR iconos=$P_ICONOS tipos=$P_TIPOS prebuild=$P_PREBUILD gradle=$P_GRADLE apk=$P_APK release=$P_RELEASE"
           } > "$d/estado.txt"
           if [ -f info-apk.txt ]; then cp info-apk.txt "$d/info-apk.txt"; fi
           if [ -f build.log ]; then

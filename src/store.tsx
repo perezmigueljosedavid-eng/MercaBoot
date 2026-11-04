@@ -1,141 +1,52 @@
-import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Crypto from 'expo-crypto';
-import { DONDE_PEDIR_CODIGO, negocioDelDirectorioConNombre } from './data/reclamo';
-import { SEMILLA_NEGOCIOS } from './data/semilla';
-import type { CategoriaProducto, Cuenta, Negocio, Producto, Rol } from './data/tipos';
-import { revisarCodigoReclamo } from './lib/reclamo';
+import * as Linking from 'expo-linking';
+import type { RealtimeChannel, Session } from '@supabase/supabase-js';
+import { NUBE_CONFIGURADA } from './config';
+import type { CategoriaProducto, Conversacion, Cuenta, Mensaje, Negocio, Producto, Rol } from './data/tipos';
+import {
+  conversacionDeFila,
+  esErrorDeRed,
+  favoritoDeFila,
+  filaDeCambioNegocio,
+  mensajeDeFila,
+  negocioDeFila,
+  productoDeFila,
+  textoError,
+  type Favorito,
+  type FilaConversacion,
+  type FilaFavorito,
+  type FilaMensaje,
+  type FilaNegocio,
+  type FilaPerfil,
+  type FilaProducto,
+} from './lib/nube';
+import { supabase } from './lib/supabase';
 
 /**
- * Estado de la app guardado en el teléfono (AsyncStorage).
- * Mientras no haya un servidor en la nube, las cuentas y los datos viven solo en cada dispositivo.
- * Cada colección se guarda por separado para que ninguna crezca demasiado.
+ * Estado de la app, guardado en la nube (Supabase).
+ *
+ *  · Cuentas: Supabase Auth (correo + contraseña); la sesión queda en el teléfono.
+ *  · Datos: negocios, productos, favoritos, conversaciones y mensajes viven en la base de datos compartida.
+ *  · En vivo: la app escucha los cambios (Supabase Realtime). Si el aviso en vivo no está disponible, vuelve a
+ *    preguntar cada pocos segundos, así que dos teléfonos siempre acaban viendo lo mismo.
+ *  · Sin internet: se muestra lo último que se guardó en el teléfono.
  */
-
-export interface Guardado {
-  cuentas: Cuenta[];
-  sesionId: string | null;
-  negocios: Negocio[];
-  productos: Producto[];
-  /** Negocios favoritos ("cliente frecuente") por id de cuenta. */
-  favoritos: Record<string, string[]>;
-}
-
-const INICIAL: Guardado = {
-  cuentas: [],
-  sesionId: null,
-  negocios: SEMILLA_NEGOCIOS,
-  productos: [],
-  favoritos: {},
-};
-
-const PREFIJO = 'mercaboot:v2:';
-const CAMPOS = Object.keys(INICIAL) as (keyof Guardado)[];
-
-let contador = 0;
-export const nuevoId = () =>
-  `${Date.now().toString(36)}${(contador++).toString(36)}${Math.random().toString(36).slice(2, 5)}`;
-
-const hashear = (id: string, pass: string) =>
-  Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, `${id}:${pass}:mercaboot`);
 
 export const correoValido = (c: string) => /^\S+@\S+\.\S+$/.test(c.trim());
 export const soloDigitos = (t: string) => t.replace(/\D/g, '');
 export const telefonoValido = (t: string) => soloDigitos(t).length === 10;
 
-/** Agrega los negocios del directorio y actualiza los que nadie ha reclamado. */
-function fusionarSemilla(guardados: Negocio[]): Negocio[] {
-  const res = [...guardados];
-  for (const sem of SEMILLA_NEGOCIOS) {
-    const i = res.findIndex((n) => n.id === sem.id);
-    if (i < 0) res.push(sem);
-    else if (!res[i].duenoId) res[i] = { ...sem };
-  }
-  return res;
-}
-
-/**
- * Que nadie se haga pasar por un negocio del directorio con un nombre igual (o casi igual).
- * `propioId` es el negocio que se está renombrando: usar su propio nombre sí está permitido.
- */
-function errorNombreDeDirectorio(nombre: string, propioId?: string): string | null {
-  const parecido = negocioDelDirectorioConNombre(nombre);
-  if (!parecido || parecido.id === propioId) return null;
-  return propioId
-    ? `«${parecido.nombre}» es otro negocio de la comunidad. Escribe un nombre distinto para el tuyo.`
-    : `Ya existe «${parecido.nombre}» en Mercaboot. Si es tu negocio, elige «Ya aparece en la lista» y escribe tu código de reclamo; si ya no aparece ahí, avísalo ${DONDE_PEDIR_CODIGO}. Si es otro negocio, ponle un nombre distinto.`;
-}
-
-/**
- * Revisa que se pueda reclamar o crear el negocio. Devuelve el mensaje de error o null si todo está bien.
- * Reclamar un negocio del directorio exige su código de reclamo; así un toque por equivocación (o un curioso) no se queda con la tienda.
- */
-async function validarAlta(act: Guardado, alta: AltaNegocio | undefined): Promise<string | null> {
-  if (!alta) return 'Elige tu negocio o regístralo.';
-  if ('reclamarId' in alta) {
-    const n = act.negocios.find((x) => x.id === alta.reclamarId);
-    if (!n) return 'No encontramos ese negocio.';
-    if (n.duenoId) return 'Ese negocio ya tiene un comerciante registrado.';
-    return revisarCodigoReclamo(n.id, n.nombre, alta.codigo);
-  }
-  if (!alta.nuevo.nombre.trim()) return 'Escribe el nombre de tu negocio.';
-  return errorNombreDeDirectorio(alta.nuevo.nombre);
-}
-
-/** Deja a la cuenta como dueña de un negocio (reclamado o nuevo) y en modo comerciante. */
-function aplicarAlta(p: Guardado, cuentaId: string, telefono: string, alta: AltaNegocio, idNuevo: string): Guardado {
-  // Por si dos toques llegan casi juntos: una cuenta no administra dos negocios y un negocio no tiene dos dueños.
-  if (p.cuentas.find((c) => c.id === cuentaId)?.negocioId) return p;
-  if ('reclamarId' in alta && p.negocios.find((n) => n.id === alta.reclamarId)?.duenoId) return p;
-  let negocios = p.negocios;
-  let negocioId: string;
-  if ('reclamarId' in alta) {
-    negocioId = alta.reclamarId;
-    negocios = negocios.map((n) =>
-      n.id === negocioId ? { ...n, duenoId: cuentaId, telefono: n.telefono ?? telefono, abierto: true } : n,
-    );
-  } else {
-    negocioId = idNuevo;
-    const d = alta.nuevo;
-    negocios = [
-      ...negocios,
-      {
-        id: negocioId,
-        nombre: d.nombre.trim(),
-        giro: d.giro,
-        direccion: d.direccion?.trim() || undefined,
-        telefono,
-        aDomicilio: false,
-        abierto: true,
-        duenoId: cuentaId,
-        creado: Date.now(),
-      },
-    ];
-  }
-  return {
-    ...p,
-    negocios,
-    cuentas: p.cuentas.map((c) => (c.id === cuentaId ? { ...c, negocioId, rol: 'comerciante' as Rol } : c)),
-  };
-}
-
-/** Una cuenta solo puede estar en modo comerciante si de verdad administra un negocio. */
-function normalizarCuentas(cuentas: Cuenta[], negocios: Negocio[]): Cuenta[] {
-  return cuentas.map((c) => {
-    const tiene = !!c.negocioId && negocios.some((n) => n.id === c.negocioId && n.duenoId === c.id);
-    if (tiene) return c;
-    // Sin un negocio propio no hay modo comerciante, y un negocio que ya no es suyo no se queda enlazado
-    if (c.rol === 'comerciante' || c.negocioId) return { ...c, rol: 'cliente' as Rol, negocioId: undefined };
-    return c;
-  });
-}
-
-/* ───────── contexto ───────── */
+/* ───────── tipos públicos ───────── */
 
 export interface DatosNegocioNuevo {
   nombre: string;
   giro: string;
   direccion?: string;
+  lat?: number;
+  lng?: number;
+  mapsUrl?: string;
 }
 
 /** Reclamar un negocio del directorio (con su código de reclamo) o crear uno nuevo. */
@@ -160,16 +71,170 @@ export interface DatosProducto {
   porEncargo?: boolean;
 }
 
+export interface NegocioLibre {
+  id: string;
+  nombre: string;
+  giro: string;
+}
+
+/** conectando · en-vivo (avisos al instante) · sin-vivo (se actualiza cada pocos segundos) · sin-internet */
+export type EstadoRed = 'conectando' | 'en-vivo' | 'sin-vivo' | 'sin-internet';
+
+export interface Datos {
+  negocios: Negocio[];
+  productos: Producto[];
+  conversaciones: Conversacion[];
+}
+
+/** ¿Hay mensajes que esta persona todavía no lee? (`soyCliente`: si es el cliente o el dueño del negocio) */
+export function sinLeer(c: Conversacion, miId: string, soyCliente: boolean): boolean {
+  if (c.ultimoEn == null || !c.ultimoAutor || c.ultimoAutor === miId) return false;
+  return c.ultimoEn > (soyCliente ? c.leidoCliente : c.leidoNegocio);
+}
+
+export function textoUltimo(c: Conversacion, miId: string): string {
+  if (!c.ultimoTexto) return '';
+  return c.ultimoAutor === miId ? `Tú: ${c.ultimoTexto}` : c.ultimoTexto;
+}
+
+/* ───────── estado interno ───────── */
+
+interface Base {
+  perfil: FilaPerfil | null;
+  negocios: Negocio[];
+  productos: Producto[];
+  favs: Favorito[];
+  conversaciones: Conversacion[];
+  mensajes: Record<string, Mensaje[]>;
+}
+
+const VACIO: Base = { perfil: null, negocios: [], productos: [], favs: [], conversaciones: [], mensajes: {} };
+
+type Accion =
+  | { t: 'limpiar' }
+  | { t: 'cache'; c: Partial<Base> }
+  | { t: 'perfil'; p: FilaPerfil | null }
+  | { t: 'todo'; negocios: Negocio[]; productos: Producto[]; favs: Favorito[]; conversaciones: Conversacion[] }
+  | { t: 'neg'; n: Negocio }
+  | { t: 'negDel'; id: string }
+  | { t: 'prod'; p: Producto }
+  | { t: 'prodDel'; id: string }
+  | { t: 'fav'; f: Favorito }
+  | { t: 'favDel'; id: string }
+  | { t: 'conv'; c: Conversacion }
+  | { t: 'convDel'; id: string }
+  | { t: 'msgs'; conv: string; ms: Mensaje[] }
+  | { t: 'msg'; m: Mensaje }
+  | { t: 'msgDel'; conv: string; id: string };
+
+const upsert = <A extends { id: string }>(lista: A[], x: A): A[] => {
+  const i = lista.findIndex((y) => y.id === x.id);
+  if (i < 0) return [...lista, x];
+  const sig = lista.slice();
+  sig[i] = x;
+  return sig;
+};
+
+const porFecha = (a: Mensaje, b: Mensaje) => a.creado - b.creado || a.id.localeCompare(b.id);
+
+/** Agrega un mensaje; si es el mismo que uno «enviando…» (mismo autor y texto), reemplaza a ese. */
+function agregarMensaje(lista: Mensaje[], m: Mensaje): Mensaje[] {
+  if (lista.some((x) => x.id === m.id)) return lista.map((x) => (x.id === m.id ? m : x));
+  const i = lista.findIndex((x) => x.pendiente && x.autorId === m.autorId && x.texto === m.texto);
+  const base = i >= 0 ? lista.filter((_, j) => j !== i) : lista;
+  return [...base, m].sort(porFecha);
+}
+
+function reductor(b: Base, a: Accion): Base {
+  switch (a.t) {
+    case 'limpiar':
+      return VACIO;
+    case 'cache':
+      return { ...b, ...a.c };
+    case 'perfil':
+      return { ...b, perfil: a.p };
+    case 'todo':
+      return { ...b, negocios: a.negocios, productos: a.productos, favs: a.favs, conversaciones: a.conversaciones };
+    case 'neg':
+      return { ...b, negocios: upsert(b.negocios, a.n) };
+    case 'negDel':
+      return { ...b, negocios: b.negocios.filter((x) => x.id !== a.id) };
+    case 'prod':
+      return { ...b, productos: upsert(b.productos, a.p) };
+    case 'prodDel':
+      return { ...b, productos: b.productos.filter((x) => x.id !== a.id) };
+    case 'fav':
+      return { ...b, favs: upsert(b.favs, a.f) };
+    case 'favDel':
+      return { ...b, favs: b.favs.filter((x) => x.id !== a.id) };
+    case 'conv':
+      return { ...b, conversaciones: upsert(b.conversaciones, a.c) };
+    case 'convDel': {
+      const resto = { ...b.mensajes };
+      delete resto[a.id];
+      return { ...b, conversaciones: b.conversaciones.filter((x) => x.id !== a.id), mensajes: resto };
+    }
+    case 'msgs': {
+      // Lo que ya estaba «enviando…» se conserva hasta que el servidor lo confirme.
+      const pendientes = (b.mensajes[a.conv] ?? []).filter((x) => x.pendiente && !a.ms.some((y) => y.autorId === x.autorId && y.texto === x.texto));
+      return { ...b, mensajes: { ...b.mensajes, [a.conv]: [...a.ms, ...pendientes].sort(porFecha) } };
+    }
+    case 'msg': {
+      const lista = b.mensajes[a.m.conversacionId];
+      // Solo se guardan los mensajes de chats que ya se abrieron; los demás se cargan al abrirlos.
+      if (!lista) return b;
+      return { ...b, mensajes: { ...b.mensajes, [a.m.conversacionId]: agregarMensaje(lista, a.m) } };
+    }
+    case 'msgDel':
+      return { ...b, mensajes: { ...b.mensajes, [a.conv]: (b.mensajes[a.conv] ?? []).filter((x) => x.id !== a.id) } };
+    default:
+      return b;
+  }
+}
+
+/* ───────── almacenamiento local ───────── */
+
+const PREFIJO = 'mercaboot:v3:';
+const claveModo = (uid: string) => `${PREFIJO}modo:${uid}`;
+const claveCache = (uid: string) => `${PREFIJO}cache:${uid}`;
+/** Un valor muy grande no cabe en el almacenamiento del teléfono: se guarda sin las fotos. */
+const LIMITE_CACHE = 1_200_000;
+
+interface Cache {
+  perfil: FilaPerfil | null;
+  negocios: Negocio[];
+  productos: Producto[];
+  favs: Favorito[];
+  conversaciones: Conversacion[];
+}
+
+/* ───────── contexto ───────── */
+
 interface Ctx {
+  /** La sesión guardada ya se revisó (se puede mostrar la app). */
   ready: boolean;
-  s: Guardado;
+  /** Ya se pusieron la dirección y la llave de Supabase (src/config.ts). */
+  nubeOk: boolean;
+  s: Datos;
   cuenta: Cuenta | null;
   /** Negocio que administra la cuenta de comerciante en sesión. */
   negocio: Negocio | null;
+  /** Ids de los negocios que esta cuenta marcó como favoritos («cliente frecuente»). */
   favoritos: string[];
+  /** Cuántos clientes marcaron como favorito al negocio de esta cuenta. */
+  seguidores: number;
+  estadoRed: EstadoRed;
+  /** Aviso corto y pasajero (por ejemplo «Sin conexión»). */
+  aviso: string | null;
+  /** Conversaciones con mensajes sin leer, según el modo en que está la cuenta. */
+  chatsSinLeer: number;
+  refrescar: () => Promise<void>;
+
+  /** Tiendas del directorio que nadie administra (sirve antes de crear la cuenta). `null` si no se pudo consultar. */
+  negociosLibres: () => Promise<NegocioLibre[] | null>;
   registrar: (r: Registro) => Promise<string | null>;
   entrar: (correo: string, password: string) => Promise<string | null>;
-  salir: () => void;
+  salir: () => Promise<void>;
   /** Cambia entre el modo cliente y el modo comerciante de la misma cuenta. */
   cambiarModo: (rol: Rol) => string | null;
   /** Revisa el código de reclamo de un negocio del directorio sin reclamarlo (sirve para avisar antes de confirmar). */
@@ -177,16 +242,29 @@ interface Ctx {
   /** Una cuenta que ya existe abre (o reclama, con su código) su negocio y pasa a modo comerciante. */
   abrirNegocio: (alta: AltaNegocio) => Promise<string | null>;
   /** La cuenta deja de administrar su negocio y sigue como cliente. */
-  soltarNegocio: () => string | null;
-  recuperarPassword: (correo: string, telefono: string, nueva: string) => Promise<string | null>;
-  actualizarCuenta: (p: Partial<Pick<Cuenta, 'nombre' | 'correo' | 'telefono' | 'fotoUri'>>) => string | null;
+  soltarNegocio: () => Promise<string | null>;
+  /** Manda al correo un enlace para escribir una contraseña nueva. */
+  recuperarPassword: (correo: string) => Promise<string | null>;
+  /** Con el enlace del correo: pone la contraseña nueva. */
+  restablecerPassword: (nueva: string) => Promise<string | null>;
+  actualizarCuenta: (p: Partial<Pick<Cuenta, 'nombre' | 'telefono' | 'fotoUri'>>) => Promise<string | null>;
   cambiarPassword: (actual: string, nueva: string) => Promise<string | null>;
-  actualizarNegocio: (p: Partial<Omit<Negocio, 'id' | 'duenoId' | 'creado'>>) => string | null;
+  actualizarNegocio: (p: Partial<Omit<Negocio, 'id' | 'duenoId' | 'creado'>>) => Promise<string | null>;
   toggleFavorito: (negocioId: string) => void;
-  agregarProducto: (p: DatosProducto) => string | null;
-  editarProducto: (id: string, p: Partial<DatosProducto>) => string | null;
-  eliminarProducto: (id: string) => void;
+  agregarProducto: (p: DatosProducto) => Promise<string | null>;
+  editarProducto: (id: string, p: Partial<DatosProducto>) => Promise<string | null>;
+  eliminarProducto: (id: string) => Promise<string | null>;
   setDisponible: (id: string, v: boolean) => void;
+
+  /** Mensajes de una conversación (vacío hasta que se abre con `observarChat`). */
+  mensajesDe: (convId: string) => Mensaje[];
+  /** Mientras un chat está abierto se mantiene al día. Devuelve la función que lo deja de seguir. */
+  observarChat: (convId: string) => () => void;
+  /** El cliente escribe en un negocio: si todavía no hay conversación, la crea con este primer mensaje. */
+  enviarComoCliente: (negocioId: string, texto: string) => Promise<string | null>;
+  /** El comerciante responde en una conversación de su negocio. */
+  enviarComoNegocio: (convId: string, texto: string) => Promise<string | null>;
+  marcarLeida: (convId: string) => void;
 }
 
 const StoreCtx = createContext<Ctx | null>(null);
@@ -197,302 +275,849 @@ export function useStore() {
   return c;
 }
 
+/** Cada cuántos milisegundos se vuelve a preguntar por si algo cambió. */
+const SONDEO_SIN_VIVO = 6000;
+const SONDEO_EN_VIVO = 60000;
+
 export function StoreProvider({ children }: { children: React.ReactNode }) {
-  const [s, setS] = useState<Guardado>(INICIAL);
-  const [ready, setReady] = useState(false);
-  const guardado = useRef<Partial<Guardado>>({});
+  const [base, dispatch] = useReducer(reductor, VACIO);
+  const [sesion, setSesion] = useState<Session | null>(null);
+  const [sesionLeida, setSesionLeida] = useState(!NUBE_CONFIGURADA);
+  const [localListo, setLocalListo] = useState(false);
+  const [modo, setModo] = useState<Rol | null>(null);
+  const [estadoRed, setEstadoRed] = useState<EstadoRed>('conectando');
+  const [aviso, setAviso] = useState<string | null>(null);
+
+  const uid = sesion?.user.id ?? null;
+  const uidRef = useRef<string | null>(null);
+  const baseRef = useRef(base);
+  const modoRef = useRef(modo);
+  const canalRef = useRef<RealtimeChannel | null>(null);
+  const canalVivo = useRef(false);
+  const enVuelo = useRef(false);
+  const pendiente = useRef(false);
+  const abiertos = useRef(new Map<string, number>());
+  const avisoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Negocios cuyo dato (por ejemplo el logo) se confirma en un momento, uno por uno. */
+  const confirmaciones = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const estadoRedRef = useRef<EstadoRed>('conectando');
+  /** Mientras se registra o inicia sesión, la app no cambia de pantalla hasta terminar todos los pasos. */
+  const bloqueada = useRef(false);
+  const ultimaSesion = useRef<Session | null>(null);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const pares = await AsyncStorage.multiGet(CAMPOS.map((k) => PREFIJO + k));
-        const leido: Record<string, unknown> = {};
-        for (const [clave, valor] of pares) {
-          if (!valor) continue;
-          try {
-            leido[clave.slice(PREFIJO.length)] = JSON.parse(valor);
-          } catch {
-            /* un campo dañado se ignora y arranca con los datos iniciales */
-          }
-        }
-        const base = { ...INICIAL, ...(leido as Partial<Guardado>) };
-        const negocios = fusionarSemilla(base.negocios);
-        setS({ ...base, negocios, cuentas: normalizarCuentas(base.cuentas, negocios) });
-      } catch {
-        /* si falla la lectura se arranca con los datos iniciales */
-      }
-      setReady(true);
-    })();
+    baseRef.current = base;
+  }, [base]);
+  useEffect(() => {
+    modoRef.current = modo;
+  }, [modo]);
+
+  const avisar = useCallback((texto: string) => {
+    setAviso(texto);
+    if (avisoTimer.current) clearTimeout(avisoTimer.current);
+    avisoTimer.current = setTimeout(() => setAviso(null), 4500);
   }, []);
 
+  const fijarModo = useCallback((m: Rol, id?: string | null) => {
+    setModo(m);
+    modoRef.current = m;
+    const quien = id ?? uidRef.current;
+    if (quien) AsyncStorage.setItem(claveModo(quien), m).catch(() => {});
+  }, []);
+
+  const bloquear = useCallback(() => {
+    bloqueada.current = true;
+  }, []);
+  const desbloquear = useCallback(() => {
+    bloqueada.current = false;
+    setSesion(ultimaSesion.current);
+  }, []);
+
+  /* ───── sesión ───── */
+
   useEffect(() => {
-    if (!ready) return;
-    const t = setTimeout(() => {
-      for (const k of CAMPOS) {
-        if (guardado.current[k] !== s[k]) {
-          guardado.current = { ...guardado.current, [k]: s[k] };
-          AsyncStorage.setItem(PREFIJO + k, JSON.stringify(s[k])).catch(() => {});
+    if (!NUBE_CONFIGURADA) return;
+    let vivo = true;
+    const aplicar = (s: Session | null) => {
+      ultimaSesion.current = s;
+      uidRef.current = s?.user.id ?? uidRef.current;
+      if (!s) uidRef.current = null;
+      if (!bloqueada.current) setSesion(s);
+    };
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (!vivo) return;
+        aplicar(data.session);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (vivo) setSesionLeida(true);
+      });
+    // Dentro de este aviso solo se guarda la sesión (nada de llamadas a Supabase: podrían trabarse).
+    const { data } = supabase.auth.onAuthStateChange((_evento, s) => aplicar(s));
+    return () => {
+      vivo = false;
+      data.subscription.unsubscribe();
+    };
+  }, []);
+
+  /* ───── leer y escribir en la nube ───── */
+
+  const refrescar = useCallback(async () => {
+    const id = uidRef.current;
+    if (!id || !NUBE_CONFIGURADA) return;
+    if (enVuelo.current) {
+      pendiente.current = true;
+      return;
+    }
+    enVuelo.current = true;
+    try {
+      do {
+        pendiente.current = false;
+        const [perfil, negocios, productos, favs, convs] = await Promise.all([
+          supabase.from('perfiles').select('id,nombre,correo,telefono,foto_uri').eq('id', id).maybeSingle(),
+          supabase.from('negocios').select('*').order('creado', { ascending: true }),
+          supabase.from('productos').select('*'),
+          supabase.from('favoritos').select('id,usuario_id,negocio_id'),
+          supabase.from('conversaciones').select('*'),
+        ]);
+        if (uidRef.current !== id) return;
+        const error = [perfil, negocios, productos, favs, convs].map((r) => r.error).find(Boolean);
+        if (error) {
+          if (esErrorDeRed(error)) setEstadoRed('sin-internet');
+          else setEstadoRed(canalVivo.current ? 'en-vivo' : 'sin-vivo');
+          return;
         }
+        dispatch({ t: 'perfil', p: (perfil.data as FilaPerfil | null) ?? baseRef.current.perfil });
+        dispatch({
+          t: 'todo',
+          negocios: ((negocios.data ?? []) as FilaNegocio[]).map(negocioDeFila),
+          productos: ((productos.data ?? []) as FilaProducto[]).map(productoDeFila),
+          favs: ((favs.data ?? []) as FilaFavorito[]).map(favoritoDeFila),
+          conversaciones: ((convs.data ?? []) as FilaConversacion[]).map(conversacionDeFila),
+        });
+        setEstadoRed(canalVivo.current ? 'en-vivo' : 'sin-vivo');
+        // Los chats que están abiertos también se ponen al día.
+        for (const conv of abiertos.current.keys()) {
+          const r = await supabase.from('mensajes').select('*').eq('conversacion_id', conv).order('creado', { ascending: true });
+          if (!r.error && uidRef.current === id) dispatch({ t: 'msgs', conv, ms: ((r.data ?? []) as FilaMensaje[]).map(mensajeDeFila) });
+        }
+      } while (pendiente.current);
+    } catch (e) {
+      if (esErrorDeRed(e)) setEstadoRed('sin-internet');
+    } finally {
+      enVuelo.current = false;
+    }
+  }, []);
+
+  /**
+   * Vuelve a pedir un solo negocio en un momento (varios avisos juntos se convierten en una sola consulta).
+   * Sirve para el logo: las fotos grandes no siempre viajan en el aviso en vivo de un cambio.
+   */
+  const confirmarNegocio = useCallback((id: string) => {
+    const previo = confirmaciones.current.get(id);
+    if (previo) clearTimeout(previo);
+    confirmaciones.current.set(
+      id,
+      setTimeout(async () => {
+        confirmaciones.current.delete(id);
+        const quien = uidRef.current;
+        if (!quien) return;
+        const { data, error } = await supabase.from('negocios').select('*').eq('id', id).maybeSingle();
+        if (!error && data && uidRef.current === quien) dispatch({ t: 'neg', n: negocioDeFila(data as FilaNegocio) });
+      }, 700),
+    );
+  }, []);
+
+  const alCambiar = useCallback(
+    (tabla: string, p: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
+      const borrar = p.eventType === 'DELETE';
+      const nuevo = p.new as never;
+      const id = String((p.old as { id?: string })?.id ?? '');
+      switch (tabla) {
+        case 'negocios':
+          if (borrar) dispatch({ t: 'negDel', id });
+          else {
+            const n = negocioDeFila(nuevo as FilaNegocio);
+            // Las fotos grandes pueden no venir en el aviso de un cambio (ni la primera vez que se sube un logo):
+            // si el logo falta, se conserva el que ya se tenía y se confirma enseguida con una consulta de ese negocio.
+            if (!('logo_uri' in (p.new as object))) {
+              const previo = baseRef.current.negocios.find((x) => x.id === n.id);
+              if (previo?.logoUri) n.logoUri = previo.logoUri;
+              confirmarNegocio(n.id);
+            }
+            dispatch({ t: 'neg', n });
+          }
+          break;
+        case 'productos':
+          if (borrar) dispatch({ t: 'prodDel', id });
+          else dispatch({ t: 'prod', p: productoDeFila(nuevo as FilaProducto) });
+          break;
+        case 'favoritos':
+          if (borrar) dispatch({ t: 'favDel', id });
+          else dispatch({ t: 'fav', f: favoritoDeFila(nuevo as FilaFavorito) });
+          break;
+        case 'conversaciones':
+          if (borrar) dispatch({ t: 'convDel', id });
+          else dispatch({ t: 'conv', c: conversacionDeFila(nuevo as FilaConversacion) });
+          break;
+        case 'mensajes':
+          if (!borrar) dispatch({ t: 'msg', m: mensajeDeFila(nuevo as FilaMensaje) });
+          break;
+        default:
       }
-    }, 250);
-    return () => clearTimeout(t);
-  }, [s, ready]);
-
-  // Siempre apunta al estado más reciente; se actualiza antes que cualquier efecto de las pantallas.
-  const ultimo = useRef(s);
-  useLayoutEffect(() => {
-    ultimo.current = s;
-  }, [s]);
-
-  const cuenta = useMemo(() => s.cuentas.find((c) => c.id === s.sesionId) ?? null, [s.cuentas, s.sesionId]);
-  const negocio = useMemo(
-    () => (cuenta?.negocioId ? (s.negocios.find((n) => n.id === cuenta.negocioId) ?? null) : null),
-    [cuenta, s.negocios],
+    },
+    [confirmarNegocio],
   );
-  const favoritos = useMemo(() => (cuenta ? (s.favoritos[cuenta.id] ?? []) : []), [cuenta, s.favoritos]);
+
+  const cerrarCanal = useCallback(() => {
+    canalVivo.current = false;
+    const c = canalRef.current;
+    canalRef.current = null;
+    if (c) supabase.removeChannel(c).catch(() => {});
+  }, []);
+
+  const abrirCanal = useCallback(
+    (id: string) => {
+      cerrarCanal();
+      let canal = supabase.channel(`mercaboot-${id.slice(0, 8)}-${Date.now().toString(36)}`);
+      for (const tabla of ['negocios', 'productos', 'favoritos', 'conversaciones', 'mensajes']) {
+        canal = canal.on('postgres_changes', { event: '*', schema: 'public', table: tabla }, (p) =>
+          alCambiar(tabla, p as unknown as Parameters<typeof alCambiar>[1]),
+        );
+      }
+      canal.subscribe((estado) => {
+        if (canalRef.current !== canal) return;
+        if (estado === 'SUBSCRIBED') {
+          canalVivo.current = true;
+          setEstadoRed('en-vivo');
+          refrescar(); // por si algo cambió mientras se conectaba
+        } else if (estado === 'CHANNEL_ERROR' || estado === 'TIMED_OUT' || estado === 'CLOSED') {
+          canalVivo.current = false;
+          setEstadoRed((e) => (e === 'sin-internet' ? e : 'sin-vivo'));
+        }
+      });
+      canalRef.current = canal;
+    },
+    [alCambiar, cerrarCanal, refrescar],
+  );
+
+  /* ───── cuando cambia la cuenta en sesión ───── */
+
+  useEffect(() => {
+    if (!NUBE_CONFIGURADA) return;
+    uidRef.current = uid;
+    let vivo = true;
+    if (!uid) {
+      // Sin cuenta en sesión: se borra lo que quedaba en memoria (en el siguiente instante, fuera del efecto).
+      queueMicrotask(() => {
+        if (!vivo) return;
+        cerrarCanal();
+        dispatch({ t: 'limpiar' });
+        setModo(null);
+        setEstadoRed('conectando');
+        setLocalListo(true);
+      });
+      return () => {
+        vivo = false;
+      };
+    }
+    (async () => {
+      try {
+        const [m, c] = await Promise.all([AsyncStorage.getItem(claveModo(uid)), AsyncStorage.getItem(claveCache(uid))]);
+        if (!vivo) return;
+        if (m === 'cliente' || m === 'comerciante') {
+          setModo(m);
+          modoRef.current = m;
+        }
+        if (c && baseRef.current.negocios.length === 0) {
+          const guardado = JSON.parse(c) as Cache;
+          dispatch({ t: 'cache', c: guardado });
+        }
+      } catch {
+        /* sin copia local: se espera a la nube */
+      }
+      if (!vivo) return;
+      setLocalListo(true);
+      await refrescar();
+      if (vivo) abrirCanal(uid);
+    })();
+    return () => {
+      vivo = false;
+      cerrarCanal();
+    };
+  }, [uid, abrirCanal, cerrarCanal, refrescar]);
+
+  // Copia local de lo último visto (para abrir la app sin internet).
+  useEffect(() => {
+    if (!uid || !base.perfil) return;
+    const t = setTimeout(() => {
+      let c: Cache = { perfil: base.perfil, negocios: base.negocios, productos: base.productos, favs: base.favs, conversaciones: base.conversaciones };
+      let texto = JSON.stringify(c);
+      if (texto.length > LIMITE_CACHE) {
+        c = { ...c, negocios: c.negocios.map((n) => ({ ...n, logoUri: undefined })) };
+        texto = JSON.stringify(c);
+      }
+      if (texto.length <= LIMITE_CACHE) AsyncStorage.setItem(claveCache(uid), texto).catch(() => {});
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [uid, base.perfil, base.negocios, base.productos, base.favs, base.conversaciones]);
+
+  useEffect(() => {
+    estadoRedRef.current = estadoRed;
+  }, [estadoRed]);
+
+  // Plan B del tiempo real: preguntar cada tanto (seguido si el aviso en vivo no funciona o no hay internet).
+  useEffect(() => {
+    if (!uid) return;
+    let vueltas = 0;
+    const t = setInterval(() => {
+      vueltas += 1;
+      // Con el aviso en vivo funcionando basta con confirmar de vez en cuando; si no, se pregunta seguido.
+      if (!canalVivo.current || estadoRedRef.current === 'sin-internet' || vueltas % Math.round(SONDEO_EN_VIVO / SONDEO_SIN_VIVO) === 0) refrescar();
+    }, SONDEO_SIN_VIVO);
+    const sub = AppState.addEventListener('change', (e) => {
+      if (e === 'active') refrescar();
+    });
+    // En el navegador el sistema avisa al instante cuando se va o regresa el internet.
+    const enWeb = Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.addEventListener === 'function';
+    const alVolver = () => {
+      refrescar();
+    };
+    const alIrse = () => setEstadoRed('sin-internet');
+    if (enWeb) {
+      window.addEventListener('online', alVolver);
+      window.addEventListener('offline', alIrse);
+    }
+    return () => {
+      clearInterval(t);
+      sub.remove();
+      if (enWeb) {
+        window.removeEventListener('online', alVolver);
+        window.removeEventListener('offline', alIrse);
+      }
+    };
+  }, [uid, refrescar]);
+
+  /* ───── datos derivados ───── */
+
+  const negocio = useMemo(() => (uid ? (base.negocios.find((n) => n.duenoId === uid) ?? null) : null), [uid, base.negocios]);
+
+  const cuenta = useMemo<Cuenta | null>(() => {
+    if (!sesion || !uid) return null;
+    const meta = (sesion.user.user_metadata ?? {}) as { nombre?: string; telefono?: string };
+    const p = base.perfil;
+    // Modo: el último que se usó en este teléfono; si no hay, comerciante cuando la cuenta tiene negocio.
+    const preferido: Rol = modo ?? (negocio ? 'comerciante' : 'cliente');
+    return {
+      id: uid,
+      nombre: p?.nombre ?? meta.nombre ?? (sesion.user.email ?? 'Cliente').split('@')[0],
+      correo: p?.correo ?? sesion.user.email ?? '',
+      telefono: p?.telefono ?? meta.telefono ?? '',
+      rol: preferido === 'comerciante' && negocio ? 'comerciante' : 'cliente',
+      fotoUri: p?.foto_uri ?? undefined,
+      negocioId: negocio?.id,
+    };
+  }, [sesion, uid, base.perfil, modo, negocio]);
+
+  const favoritos = useMemo(() => base.favs.filter((f) => f.usuarioId === uid).map((f) => f.negocioId), [base.favs, uid]);
+  const seguidores = useMemo(
+    () => (negocio ? base.favs.filter((f) => f.negocioId === negocio.id && f.usuarioId !== uid).length : 0),
+    [base.favs, negocio, uid],
+  );
+
+  const chatsSinLeer = useMemo(() => {
+    if (!uid || !cuenta) return 0;
+    if (cuenta.rol === 'comerciante' && negocio) {
+      return base.conversaciones.filter((c) => c.negocioId === negocio.id && c.ultimoTexto && sinLeer(c, uid, false)).length;
+    }
+    return base.conversaciones.filter((c) => c.clienteId === uid && c.ultimoTexto && sinLeer(c, uid, true)).length;
+  }, [base.conversaciones, cuenta, negocio, uid]);
+
+  const datos = useMemo<Datos>(
+    () => ({ negocios: base.negocios, productos: base.productos, conversaciones: base.conversaciones }),
+    [base.negocios, base.productos, base.conversaciones],
+  );
 
   /* ───── cuenta ───── */
 
-  const registrar = useCallback(async (r: Registro) => {
-    const correo = r.correo.trim().toLowerCase();
-    const act = ultimo.current;
-    const existente = act.cuentas.find((c) => c.correo === correo);
-
-    if (r.rol === 'comerciante') {
-      const err = await validarAlta(act, r.negocio);
-      if (err) return err;
-    }
-    const alta = r.rol === 'comerciante' ? r.negocio : undefined;
-
-    // Ya tiene cuenta con ese correo: con su contraseña de siempre usa la misma cuenta
-    // (por ejemplo, se registró como cliente y ahora también quiere vender).
-    if (existente) {
-      if ((await hashear(existente.id, r.password)) !== existente.hash) {
-        return 'Ese correo ya tiene una cuenta. Si es tuya, escribe tu contraseña de siempre y agregamos todo a la misma cuenta; si no, usa otro correo.';
-      }
-      if (alta) {
-        if (existente.negocioId) return 'Tu cuenta ya administra un negocio. Entra con "Iniciar sesión" y cambia de modo desde tu perfil.';
-        const idNuevo = nuevoId();
-        setS((p) => ({ ...aplicarAlta(p, existente.id, existente.telefono, alta, idNuevo), sesionId: existente.id }));
-      } else {
-        setS((p) => ({
-          ...p,
-          sesionId: existente.id,
-          cuentas: p.cuentas.map((c) => (c.id === existente.id ? { ...c, rol: 'cliente' as Rol } : c)),
-        }));
-      }
-      return null;
-    }
-
-    const id = nuevoId();
-    const hash = await hashear(id, r.password);
-    const telefono = soloDigitos(r.telefono);
-    const cuentaNueva: Cuenta = { id, nombre: r.nombre.trim(), correo, telefono, hash, rol: 'cliente' };
-    const idNegocio = nuevoId();
-
-    setS((p) => {
-      const conCuenta: Guardado = { ...p, cuentas: [...p.cuentas, cuentaNueva], sesionId: id };
-      return alta ? aplicarAlta(conCuenta, id, telefono, alta, idNegocio) : conCuenta;
-    });
-    return null;
-  }, []);
-
-  const entrar = useCallback(async (correoIn: string, password: string) => {
-    const correo = correoIn.trim().toLowerCase();
-    const c = ultimo.current.cuentas.find((x) => x.correo === correo);
-    if (!c) return 'No encontramos esa cuenta. Crea una primero.';
-    const hash = await hashear(c.id, password);
-    if (c.hash !== hash) return 'Correo o contraseña incorrectos.';
-    setS((p) => ({ ...p, sesionId: c.id }));
-    return null;
-  }, []);
-
-  const salir = useCallback(() => setS((p) => ({ ...p, sesionId: null })), []);
-
-  const cambiarModo = useCallback<Ctx['cambiarModo']>((rol) => {
-    const act = ultimo.current;
-    const yo = act.cuentas.find((c) => c.id === act.sesionId);
-    if (!yo) return 'No hay una sesión activa.';
-    if (rol === 'comerciante' && !yo.negocioId) return 'Primero abre tu negocio.';
-    setS((p) => ({ ...p, cuentas: p.cuentas.map((c) => (c.id === yo.id ? { ...c, rol } : c)) }));
-    return null;
+  const negociosLibres = useCallback<Ctx['negociosLibres']>(async () => {
+    const { data, error } = await supabase.rpc('negocios_libres');
+    if (error) return null;
+    return (data ?? []) as NegocioLibre[];
   }, []);
 
   const comprobarReclamo = useCallback<Ctx['comprobarReclamo']>(async (negocioId, codigo) => {
-    const n = ultimo.current.negocios.find((x) => x.id === negocioId);
-    if (!n) return 'No encontramos ese negocio.';
-    if (n.duenoId) return 'Ese negocio ya tiene un comerciante registrado.';
-    return revisarCodigoReclamo(n.id, n.nombre, codigo);
+    const { data, error } = await supabase.rpc('comprobar_reclamo', { p_negocio: negocioId, p_codigo: codigo });
+    if (error) return textoError(error);
+    return (data as string | null) ?? null;
   }, []);
 
-  const abrirNegocio = useCallback<Ctx['abrirNegocio']>(async (alta) => {
-    const antes = ultimo.current;
-    const yo = antes.cuentas.find((c) => c.id === antes.sesionId);
-    if (!yo) return 'No hay una sesión activa.';
-    if (yo.negocioId) return 'Tu cuenta ya administra un negocio.';
-    const err = await validarAlta(antes, alta);
-    if (err) return err;
-    // Revisar el código toma un instante: antes de guardar se confirma que nada cambió mientras tanto.
-    const act = ultimo.current;
-    if (act.sesionId !== yo.id) return 'Tu sesión cambió. Inicia sesión otra vez.';
-    if (act.cuentas.find((c) => c.id === yo.id)?.negocioId) return 'Tu cuenta ya administra un negocio.';
-    if ('reclamarId' in alta && act.negocios.find((n) => n.id === alta.reclamarId)?.duenoId) return 'Ese negocio ya tiene un comerciante registrado.';
-    const idNuevo = nuevoId();
-    setS((p) => aplicarAlta(p, yo.id, yo.telefono, alta, idNuevo));
+  /** Revisa el negocio que se quiere reclamar o crear. Devuelve el mensaje de error o null si todo está bien. */
+  const validarAlta = useCallback(
+    async (alta: AltaNegocio | undefined): Promise<string | null> => {
+      if (!alta) return 'Elige tu negocio o regístralo.';
+      if ('reclamarId' in alta) return comprobarReclamo(alta.reclamarId, alta.codigo);
+      if (!alta.nuevo.nombre.trim()) return 'Escribe el nombre de tu negocio.';
+      const { data, error } = await supabase.rpc('nombre_disponible', { p_nombre: alta.nuevo.nombre });
+      if (error) return textoError(error);
+      return (data as string | null) ?? null;
+    },
+    [comprobarReclamo],
+  );
+
+  /** Con la sesión ya iniciada: deja a la cuenta como dueña del negocio. */
+  const aplicarAlta = useCallback(async (alta: AltaNegocio): Promise<string | null> => {
+    const r =
+      'reclamarId' in alta
+        ? await supabase.rpc('reclamar_negocio', { p_negocio: alta.reclamarId, p_codigo: alta.codigo })
+        : await supabase.rpc('crear_negocio', {
+            p_nombre: alta.nuevo.nombre.trim(),
+            p_giro: alta.nuevo.giro,
+            p_direccion: alta.nuevo.direccion?.trim() || null,
+            p_lat: alta.nuevo.lat ?? null,
+            p_lng: alta.nuevo.lng ?? null,
+            p_maps_url: alta.nuevo.mapsUrl ?? null,
+          });
+    if (r.error) return textoError(r.error);
+    return (r.data as string | null) ?? null;
+  }, []);
+
+  const registrar = useCallback<Ctx['registrar']>(
+    async (r) => {
+      if (!NUBE_CONFIGURADA) return 'Falta conectar la base de datos (src/config.ts).';
+      const correo = r.correo.trim().toLowerCase();
+      const telefono = soloDigitos(r.telefono);
+      const alta = r.rol === 'comerciante' ? r.negocio : undefined;
+
+      // Primero se revisa el negocio, para no dejar cuentas a medias.
+      if (r.rol === 'comerciante') {
+        const err = await validarAlta(alta);
+        if (err) return err;
+      }
+
+      bloquear();
+      try {
+        let creada = false;
+        let sesionNueva: Session | null = null;
+        const alta1 = await supabase.auth.signUp({
+          email: correo,
+          password: r.password,
+          options: { data: { nombre: r.nombre.trim(), telefono } },
+        });
+        if (alta1.error) {
+          const cod = (alta1.error as { code?: string }).code ?? '';
+          const existe = cod === 'user_already_exists' || cod === 'email_exists' || /already registered/i.test(alta1.error.message);
+          if (!existe) return textoError(alta1.error);
+        } else if (alta1.data.session) {
+          sesionNueva = alta1.data.session;
+          creada = true;
+        }
+
+        if (!sesionNueva) {
+          // Ya tiene cuenta con ese correo: con su contraseña de siempre usa la misma cuenta
+          // (por ejemplo, se registró como cliente y ahora también quiere vender).
+          const entrada = await supabase.auth.signInWithPassword({ email: correo, password: r.password });
+          if (entrada.error) {
+            const cod = (entrada.error as { code?: string }).code ?? '';
+            if (cod === 'email_not_confirmed') {
+              return 'Te enviamos un correo para confirmar tu cuenta. Ábrelo y luego inicia sesión.';
+            }
+            if (cod === 'invalid_credentials') {
+              return 'Ese correo ya tiene una cuenta. Si es tuya, escribe tu contraseña de siempre y agregamos todo a la misma cuenta; si no, usa otro correo.';
+            }
+            return textoError(entrada.error);
+          }
+          sesionNueva = entrada.data.session;
+        }
+        if (!sesionNueva) return 'No pudimos iniciar tu sesión. Inténtalo de nuevo.';
+        const id = sesionNueva.user.id;
+        uidRef.current = id;
+        ultimaSesion.current = sesionNueva;
+
+        if (alta) {
+          const err = await aplicarAlta(alta);
+          if (err) {
+            // Una cuenta que se acaba de crear y no pudo abrir su negocio se retira; una que ya existía se deja como estaba.
+            if (creada) await supabase.rpc('eliminar_mi_cuenta');
+            await supabase.auth.signOut({ scope: 'local' });
+            uidRef.current = null;
+            ultimaSesion.current = null;
+            return err;
+          }
+          fijarModo('comerciante', id);
+        } else {
+          fijarModo('cliente', id);
+        }
+        await refrescar();
+        return null;
+      } catch (e) {
+        return textoError(e);
+      } finally {
+        desbloquear();
+      }
+    },
+    [aplicarAlta, bloquear, desbloquear, fijarModo, refrescar, validarAlta],
+  );
+
+  const entrar = useCallback<Ctx['entrar']>(
+    async (correoIn, password) => {
+      if (!NUBE_CONFIGURADA) return 'Falta conectar la base de datos (src/config.ts).';
+      const correo = correoIn.trim().toLowerCase();
+      bloquear();
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({ email: correo, password });
+        if (error) return textoError(error);
+        const id = data.user.id;
+        uidRef.current = id;
+        ultimaSesion.current = data.session;
+        try {
+          const m = await AsyncStorage.getItem(claveModo(id));
+          if (m === 'cliente' || m === 'comerciante') {
+            setModo(m);
+            modoRef.current = m;
+          } else setModo(null);
+        } catch {
+          setModo(null);
+        }
+        await refrescar();
+        return null;
+      } catch (e) {
+        return textoError(e);
+      } finally {
+        desbloquear();
+      }
+    },
+    [bloquear, desbloquear, refrescar],
+  );
+
+  const salir = useCallback<Ctx['salir']>(async () => {
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch {
+      /* aunque falle la red, la sesión del teléfono se cierra */
+    }
+    uidRef.current = null;
+  }, []);
+
+  const cambiarModo = useCallback<Ctx['cambiarModo']>(
+    (rol) => {
+      if (!uidRef.current) return 'No hay una sesión activa.';
+      if (rol === 'comerciante' && !baseRef.current.negocios.some((n) => n.duenoId === uidRef.current)) return 'Primero abre tu negocio.';
+      fijarModo(rol);
+      return null;
+    },
+    [fijarModo],
+  );
+
+  const abrirNegocio = useCallback<Ctx['abrirNegocio']>(
+    async (alta) => {
+      if (!uidRef.current) return 'No hay una sesión activa.';
+      if (baseRef.current.negocios.some((n) => n.duenoId === uidRef.current)) return 'Tu cuenta ya administra un negocio.';
+      const err = await validarAlta(alta);
+      if (err) return err;
+      const e2 = await aplicarAlta(alta);
+      if (e2) return e2;
+      fijarModo('comerciante');
+      await refrescar();
+      return null;
+    },
+    [aplicarAlta, fijarModo, refrescar, validarAlta],
+  );
+
+  const soltarNegocio = useCallback<Ctx['soltarNegocio']>(async () => {
+    if (!uidRef.current) return 'No hay una sesión activa.';
+    const { data, error } = await supabase.rpc('soltar_negocio');
+    if (error) return textoError(error);
+    if (data) return data as string;
+    fijarModo('cliente');
+    await refrescar();
     return null;
-  }, []);
+  }, [fijarModo, refrescar]);
 
-  const soltarNegocio = useCallback<Ctx['soltarNegocio']>(() => {
-    const act = ultimo.current;
-    const yo = act.cuentas.find((c) => c.id === act.sesionId);
-    if (!yo?.negocioId) return 'Tu cuenta no administra ningún negocio.';
-    const nid = yo.negocioId;
-    const original = SEMILLA_NEGOCIOS.find((n) => n.id === nid);
-    setS((p) => {
-      // Una tienda del directorio vuelve a quedar sin dueño; un negocio que creó la persona desaparece.
-      const negocios = original ? p.negocios.map((n) => (n.id === nid ? { ...original } : n)) : p.negocios.filter((n) => n.id !== nid);
-      const favoritos = original
-        ? p.favoritos
-        : Object.fromEntries(Object.entries(p.favoritos).map(([k, v]) => [k, v.filter((x) => x !== nid)]));
-      return {
-        ...p,
-        negocios,
-        favoritos,
-        productos: p.productos.filter((x) => x.negocioId !== nid),
-        cuentas: p.cuentas.map((c) => (c.id === yo.id ? { ...c, negocioId: undefined, rol: 'cliente' as Rol } : c)),
-      };
-    });
-    return null;
-  }, []);
-
-  const recuperarPassword = useCallback(async (correoIn: string, telefono: string, nueva: string) => {
+  const recuperarPassword = useCallback<Ctx['recuperarPassword']>(async (correoIn) => {
     const correo = correoIn.trim().toLowerCase();
-    const c = ultimo.current.cuentas.find((x) => x.correo === correo);
-    if (!c || c.telefono !== soloDigitos(telefono)) return 'El correo y el teléfono no coinciden con ninguna cuenta.';
-    if (nueva.length < 8) return 'La contraseña nueva debe tener al menos 8 caracteres.';
-    const hash = await hashear(c.id, nueva);
-    setS((p) => ({ ...p, cuentas: p.cuentas.map((x) => (x.id === c.id ? { ...x, hash } : x)) }));
-    return null;
+    if (!correoValido(correo)) return 'Escribe un correo válido.';
+    const destino = Linking.createURL('restablecer');
+    const { error } = await supabase.auth.resetPasswordForEmail(correo, { redirectTo: destino });
+    return error ? textoError(error) : null;
   }, []);
 
-  const actualizarCuenta = useCallback<Ctx['actualizarCuenta']>((patch) => {
-    const act = ultimo.current;
-    const yo = act.cuentas.find((c) => c.id === act.sesionId);
-    if (!yo) return 'No hay una sesión activa.';
-    const sig: Partial<Cuenta> = { ...patch };
-    if (patch.nombre !== undefined) {
-      if (!patch.nombre.trim()) return 'Escribe tu nombre.';
-      sig.nombre = patch.nombre.trim();
-    }
-    if (patch.correo !== undefined) {
-      const c = patch.correo.trim().toLowerCase();
-      if (!correoValido(c)) return 'Escribe un correo válido.';
-      if (act.cuentas.some((x) => x.id !== yo.id && x.correo === c)) return 'Ya existe una cuenta con ese correo.';
-      sig.correo = c;
-    }
-    if (patch.telefono !== undefined) {
-      if (!telefonoValido(patch.telefono)) return 'El teléfono debe tener 10 dígitos.';
-      sig.telefono = soloDigitos(patch.telefono);
-    }
-    setS((p) => ({ ...p, cuentas: p.cuentas.map((c) => (c.id === yo.id ? { ...c, ...sig } : c)) }));
-    return null;
+  const restablecerPassword = useCallback<Ctx['restablecerPassword']>(async (nueva) => {
+    if (nueva.length < 8) return 'La contraseña nueva debe tener al menos 8 caracteres.';
+    const { error } = await supabase.auth.updateUser({ password: nueva });
+    return error ? textoError(error) : null;
   }, []);
+
+  const actualizarCuenta = useCallback<Ctx['actualizarCuenta']>(
+    async (patch) => {
+      const id = uidRef.current;
+      if (!id) return 'No hay una sesión activa.';
+      const cambio: Record<string, unknown> = {};
+      if (patch.nombre !== undefined) {
+        if (!patch.nombre.trim()) return 'Escribe tu nombre.';
+        cambio.nombre = patch.nombre.trim();
+      }
+      if (patch.telefono !== undefined) {
+        if (!telefonoValido(patch.telefono)) return 'El teléfono debe tener 10 dígitos.';
+        cambio.telefono = soloDigitos(patch.telefono);
+      }
+      if ('fotoUri' in patch) cambio.foto_uri = patch.fotoUri || null;
+      const { data, error } = await supabase.from('perfiles').update(cambio).eq('id', id).select('id,nombre,correo,telefono,foto_uri').single();
+      if (error) return textoError(error);
+      dispatch({ t: 'perfil', p: data as FilaPerfil });
+      return null;
+    },
+    [],
+  );
 
   const cambiarPassword = useCallback<Ctx['cambiarPassword']>(async (actual, nueva) => {
-    const act = ultimo.current;
-    const yo = act.cuentas.find((c) => c.id === act.sesionId);
-    if (!yo) return 'No hay una sesión activa.';
-    if ((await hashear(yo.id, actual)) !== yo.hash) return 'La contraseña actual no es correcta.';
+    const correo = baseRef.current.perfil?.correo;
+    if (!uidRef.current || !correo) return 'No hay una sesión activa.';
     if (nueva.length < 8) return 'La contraseña nueva debe tener al menos 8 caracteres.';
-    const hash = await hashear(yo.id, nueva);
-    setS((p) => ({ ...p, cuentas: p.cuentas.map((c) => (c.id === yo.id ? { ...c, hash } : c)) }));
-    return null;
+    const prueba = await supabase.auth.signInWithPassword({ email: correo, password: actual });
+    if (prueba.error) {
+      return (prueba.error as { code?: string }).code === 'invalid_credentials' ? 'La contraseña actual no es correcta.' : textoError(prueba.error);
+    }
+    const { error } = await supabase.auth.updateUser({ password: nueva });
+    return error ? textoError(error) : null;
   }, []);
 
   /* ───── negocio ───── */
 
-  const actualizarNegocio = useCallback<Ctx['actualizarNegocio']>((patch) => {
-    const act = ultimo.current;
-    const yo = act.cuentas.find((c) => c.id === act.sesionId);
-    if (!yo?.negocioId) return 'Tu cuenta no administra ningún negocio.';
-    if (patch.nombre !== undefined) {
-      if (!patch.nombre.trim()) return 'Escribe el nombre del negocio.';
-      // Tampoco se vale cambiarle el nombre al negocio propio para hacerse pasar por uno del directorio
-      const choque = errorNombreDeDirectorio(patch.nombre, yo.negocioId);
-      if (choque) return choque;
-    }
-    const limpio: Partial<Negocio> = { ...patch };
-    if (patch.nombre !== undefined) limpio.nombre = patch.nombre.trim();
-    setS((p) => ({ ...p, negocios: p.negocios.map((n) => (n.id === yo.negocioId ? { ...n, ...limpio } : n)) }));
+  const miNegocio = () => baseRef.current.negocios.find((n) => n.duenoId === uidRef.current);
+
+  const actualizarNegocio = useCallback<Ctx['actualizarNegocio']>(async (patch) => {
+    const mio = miNegocio();
+    if (!mio) return 'Tu cuenta no administra ningún negocio.';
+    if (patch.nombre !== undefined && !patch.nombre.trim()) return 'Escribe el nombre del negocio.';
+    const fila = filaDeCambioNegocio(patch);
+    if (Object.keys(fila).length === 0) return null;
+    const { data, error } = await supabase.from('negocios').update(fila).eq('id', mio.id).select('*').single();
+    if (error) return textoError(error);
+    dispatch({ t: 'neg', n: negocioDeFila(data as FilaNegocio) });
     return null;
   }, []);
 
-  const toggleFavorito = useCallback((negocioId: string) => {
-    setS((p) => {
-      if (!p.sesionId) return p;
-      if (p.negocios.find((n) => n.id === negocioId)?.duenoId === p.sesionId) return p;
-      const lista = p.favoritos[p.sesionId] ?? [];
-      const sig = lista.includes(negocioId) ? lista.filter((x) => x !== negocioId) : [...lista, negocioId];
-      return { ...p, favoritos: { ...p.favoritos, [p.sesionId]: sig } };
-    });
-  }, []);
+  const toggleFavorito = useCallback<Ctx['toggleFavorito']>(
+    (negocioId) => {
+      const id = uidRef.current;
+      if (!id) return;
+      if (baseRef.current.negocios.find((n) => n.id === negocioId)?.duenoId === id) return;
+      const actual = baseRef.current.favs.find((f) => f.usuarioId === id && f.negocioId === negocioId);
+      (async () => {
+        if (actual) {
+          dispatch({ t: 'favDel', id: actual.id });
+          const { error } = await supabase.from('favoritos').delete().eq('id', actual.id);
+          if (error) {
+            dispatch({ t: 'fav', f: actual });
+            avisar(textoError(error));
+          }
+          return;
+        }
+        const tmp: Favorito = { id: `tmp-${negocioId}`, usuarioId: id, negocioId };
+        dispatch({ t: 'fav', f: tmp });
+        const { data, error } = await supabase
+          .from('favoritos')
+          .insert({ usuario_id: id, negocio_id: negocioId })
+          .select('id,usuario_id,negocio_id')
+          .single();
+        dispatch({ t: 'favDel', id: tmp.id });
+        if (error) {
+          if ((error as { code?: string }).code === '23505') refrescar();
+          else avisar(textoError(error));
+          return;
+        }
+        dispatch({ t: 'fav', f: favoritoDeFila(data as FilaFavorito) });
+      })();
+    },
+    [avisar, refrescar],
+  );
 
   /* ───── productos ───── */
 
-  const miNegocioId = () => {
-    const act = ultimo.current;
-    return act.cuentas.find((c) => c.id === act.sesionId)?.negocioId;
-  };
-
-  const agregarProducto = useCallback<Ctx['agregarProducto']>((d) => {
-    const negocioId = miNegocioId();
-    if (!negocioId) return 'Tu cuenta no administra ningún negocio.';
+  const agregarProducto = useCallback<Ctx['agregarProducto']>(async (d) => {
+    const mio = miNegocio();
+    if (!mio) return 'Tu cuenta no administra ningún negocio.';
     const nombre = d.nombre.trim();
     if (!nombre) return 'Escribe el nombre del producto.';
-    const igual = (x: Producto) => x.negocioId === negocioId && x.nombre.toLowerCase() === nombre.toLowerCase();
-    if (ultimo.current.productos.some(igual)) return 'Ya tienes un producto con ese nombre.';
-    const nuevo: Producto = { ...d, nombre, id: nuevoId(), negocioId, actualizado: Date.now() };
-    setS((p) => ({ ...p, productos: [...p.productos, nuevo] }));
+    if (baseRef.current.productos.some((x) => x.negocioId === mio.id && x.nombre.trim().toLowerCase() === nombre.toLowerCase())) {
+      return 'Ya tienes un producto con ese nombre.';
+    }
+    const { data, error } = await supabase
+      .from('productos')
+      .insert({
+        negocio_id: mio.id,
+        nombre,
+        precio: d.precio ?? null,
+        unidad: d.unidad,
+        disponible: d.disponible,
+        categoria: d.categoria,
+        por_encargo: !!d.porEncargo,
+      })
+      .select('*')
+      .single();
+    if (error) return (error as { code?: string }).code === '23505' ? 'Ya tienes un producto con ese nombre.' : textoError(error);
+    dispatch({ t: 'prod', p: productoDeFila(data as FilaProducto) });
     return null;
   }, []);
 
-  const editarProducto = useCallback<Ctx['editarProducto']>((id, d) => {
-    const negocioId = miNegocioId();
-    const prod = ultimo.current.productos.find((x) => x.id === id);
-    if (!prod || prod.negocioId !== negocioId) return 'No encontramos ese producto.';
-    const patch: Partial<Producto> = { ...d, actualizado: Date.now() };
+  const editarProducto = useCallback<Ctx['editarProducto']>(async (id, d) => {
+    const mio = miNegocio();
+    const prod = baseRef.current.productos.find((x) => x.id === id);
+    if (!mio || !prod || prod.negocioId !== mio.id) return 'No encontramos ese producto.';
+    const fila: Record<string, unknown> = {};
     if (d.nombre !== undefined) {
       const nombre = d.nombre.trim();
       if (!nombre) return 'Escribe el nombre del producto.';
-      if (ultimo.current.productos.some((x) => x.id !== id && x.negocioId === negocioId && x.nombre.toLowerCase() === nombre.toLowerCase())) {
+      if (baseRef.current.productos.some((x) => x.id !== id && x.negocioId === mio.id && x.nombre.trim().toLowerCase() === nombre.toLowerCase())) {
         return 'Ya tienes un producto con ese nombre.';
       }
-      patch.nombre = nombre;
+      fila.nombre = nombre;
     }
-    setS((p) => ({ ...p, productos: p.productos.map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
+    if ('precio' in d) fila.precio = d.precio ?? null;
+    if (d.unidad !== undefined) fila.unidad = d.unidad;
+    if (d.disponible !== undefined) fila.disponible = d.disponible;
+    if (d.categoria !== undefined) fila.categoria = d.categoria;
+    if (d.porEncargo !== undefined) fila.por_encargo = d.porEncargo;
+    if (Object.keys(fila).length === 0) return null;
+    const { data, error } = await supabase.from('productos').update(fila).eq('id', id).select('*');
+    if (error) return (error as { code?: string }).code === '23505' ? 'Ya tienes un producto con ese nombre.' : textoError(error);
+    if (!data || data.length === 0) return 'No encontramos ese producto.';
+    dispatch({ t: 'prod', p: productoDeFila(data[0] as FilaProducto) });
     return null;
   }, []);
 
-  const eliminarProducto = useCallback((id: string) => {
-    const negocioId = miNegocioId();
-    setS((p) => ({ ...p, productos: p.productos.filter((x) => !(x.id === id && x.negocioId === negocioId)) }));
+  const eliminarProducto = useCallback<Ctx['eliminarProducto']>(async (id) => {
+    const mio = miNegocio();
+    const prod = baseRef.current.productos.find((x) => x.id === id);
+    if (!mio || !prod || prod.negocioId !== mio.id) return 'No encontramos ese producto.';
+    const { error } = await supabase.from('productos').delete().eq('id', id);
+    if (error) return textoError(error);
+    dispatch({ t: 'prodDel', id });
+    return null;
   }, []);
 
-  const setDisponible = useCallback((id: string, v: boolean) => {
-    const negocioId = miNegocioId();
-    setS((p) => ({
-      ...p,
-      productos: p.productos.map((x) => (x.id === id && x.negocioId === negocioId ? { ...x, disponible: v, actualizado: Date.now() } : x)),
-    }));
+  const setDisponible = useCallback<Ctx['setDisponible']>(
+    (id, v) => {
+      const mio = miNegocio();
+      const prod = baseRef.current.productos.find((x) => x.id === id);
+      if (!mio || !prod || prod.negocioId !== mio.id || prod.disponible === v) return;
+      dispatch({ t: 'prod', p: { ...prod, disponible: v, actualizado: Date.now() } });
+      (async () => {
+        const { data, error } = await supabase.from('productos').update({ disponible: v }).eq('id', id).select('*');
+        if (error || !data || data.length === 0) {
+          dispatch({ t: 'prod', p: prod });
+          avisar(error ? textoError(error) : 'No se pudo cambiar el producto.');
+          return;
+        }
+        dispatch({ t: 'prod', p: productoDeFila(data[0] as FilaProducto) });
+      })();
+    },
+    [avisar],
+  );
+
+  /* ───── chat ───── */
+
+  const cargarMensajes = useCallback(async (conv: string) => {
+    const r = await supabase.from('mensajes').select('*').eq('conversacion_id', conv).order('creado', { ascending: true });
+    if (r.error) {
+      if (esErrorDeRed(r.error)) setEstadoRed('sin-internet');
+      return;
+    }
+    dispatch({ t: 'msgs', conv, ms: ((r.data ?? []) as FilaMensaje[]).map(mensajeDeFila) });
   }, []);
+
+  const observarChat = useCallback<Ctx['observarChat']>(
+    (conv) => {
+      abiertos.current.set(conv, (abiertos.current.get(conv) ?? 0) + 1);
+      cargarMensajes(conv);
+      return () => {
+        const n = (abiertos.current.get(conv) ?? 1) - 1;
+        if (n <= 0) abiertos.current.delete(conv);
+        else abiertos.current.set(conv, n);
+      };
+    },
+    [cargarMensajes],
+  );
+
+  const mensajesDe = useCallback<Ctx['mensajesDe']>((conv) => base.mensajes[conv] ?? [], [base.mensajes]);
+
+  /** Escribe un mensaje: aparece al instante como «enviando» y el servidor lo confirma. */
+  const publicarMensaje = useCallback(
+    async (conv: string, texto: string): Promise<string | null> => {
+      const id = uidRef.current;
+      if (!id) return 'No hay una sesión activa.';
+      const limpio = texto.trim();
+      if (!limpio) return null;
+      if (limpio.length > 2000) return 'El mensaje es muy largo (máximo 2000 letras).';
+      const tmp: Mensaje = { id: `tmp-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, conversacionId: conv, autorId: id, texto: limpio, creado: Date.now(), pendiente: true };
+      if (!baseRef.current.mensajes[conv]) dispatch({ t: 'msgs', conv, ms: [] });
+      dispatch({ t: 'msg', m: tmp });
+      const { data, error } = await supabase
+        .from('mensajes')
+        .insert({ conversacion_id: conv, autor_id: id, texto: limpio })
+        .select('*')
+        .single();
+      if (error) {
+        dispatch({ t: 'msgDel', conv, id: tmp.id });
+        return textoError(error);
+      }
+      dispatch({ t: 'msg', m: mensajeDeFila(data as FilaMensaje) });
+      return null;
+    },
+    [],
+  );
+
+  const enviarComoCliente = useCallback<Ctx['enviarComoCliente']>(
+    async (negocioId, texto) => {
+      const id = uidRef.current;
+      if (!id) return 'No hay una sesión activa.';
+      if (!texto.trim()) return null;
+      let conv = baseRef.current.conversaciones.find((c) => c.negocioId === negocioId && c.clienteId === id)?.id;
+      if (!conv) {
+        const { data, error } = await supabase.rpc('abrir_conversacion', { p_negocio: negocioId });
+        if (error) return textoError(error);
+        conv = data as string;
+        const fila = await supabase.from('conversaciones').select('*').eq('id', conv).single();
+        if (!fila.error) dispatch({ t: 'conv', c: conversacionDeFila(fila.data as FilaConversacion) });
+      }
+      return publicarMensaje(conv, texto);
+    },
+    [publicarMensaje],
+  );
+
+  const enviarComoNegocio = useCallback<Ctx['enviarComoNegocio']>((conv, texto) => publicarMensaje(conv, texto), [publicarMensaje]);
+
+  const marcarLeida = useCallback<Ctx['marcarLeida']>((conv) => {
+    const id = uidRef.current;
+    const c = baseRef.current.conversaciones.find((x) => x.id === conv);
+    if (!id || !c) return;
+    const soyCliente = c.clienteId === id;
+    const hasta = c.ultimoEn ?? Date.now();
+    dispatch({ t: 'conv', c: soyCliente ? { ...c, leidoCliente: Math.max(c.leidoCliente, hasta) } : { ...c, leidoNegocio: Math.max(c.leidoNegocio, hasta) } });
+    supabase.rpc('marcar_leida', { p_conv: conv }).then(() => {});
+  }, []);
+
+  /* ───── contexto ───── */
+
+  const ready = sesionLeida && (!uid || localListo);
 
   const value = useMemo<Ctx>(
     () => ({
       ready,
-      s,
+      nubeOk: NUBE_CONFIGURADA,
+      s: datos,
       cuenta,
       negocio,
       favoritos,
+      seguidores,
+      estadoRed,
+      aviso,
+      chatsSinLeer,
+      refrescar,
+      negociosLibres,
       registrar,
       entrar,
       salir,
@@ -501,6 +1126,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       abrirNegocio,
       soltarNegocio,
       recuperarPassword,
+      restablecerPassword,
       actualizarCuenta,
       cambiarPassword,
       actualizarNegocio,
@@ -509,12 +1135,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       editarProducto,
       eliminarProducto,
       setDisponible,
+      mensajesDe,
+      observarChat,
+      enviarComoCliente,
+      enviarComoNegocio,
+      marcarLeida,
     }),
     [
-      ready, s, cuenta, negocio, favoritos, registrar, entrar, salir, cambiarModo, comprobarReclamo, abrirNegocio, soltarNegocio,
-      recuperarPassword, actualizarCuenta,
-      cambiarPassword, actualizarNegocio, toggleFavorito, agregarProducto, editarProducto, eliminarProducto,
-      setDisponible,
+      ready, datos, cuenta, negocio, favoritos, seguidores, estadoRed, aviso, chatsSinLeer, refrescar, negociosLibres, registrar, entrar, salir,
+      cambiarModo, comprobarReclamo, abrirNegocio, soltarNegocio, recuperarPassword, restablecerPassword, actualizarCuenta, cambiarPassword,
+      actualizarNegocio, toggleFavorito, agregarProducto, editarProducto, eliminarProducto, setDisponible, mensajesDe, observarChat,
+      enviarComoCliente, enviarComoNegocio, marcarLeida,
     ],
   );
 

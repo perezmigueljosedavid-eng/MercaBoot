@@ -3,7 +3,7 @@
     "name": "Mercaboot",
     "slug": "mercaboot",
     "scheme": "mercaboot",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "com.mercaboot.app",
-      "versionCode": 1,
+      "versionCode": 2,
       "adaptiveIcon": {
         "backgroundColor": "#1F7A4D",
         "foregroundImage": "./assets/adaptive-icon.png"
@@ -43,6 +43,15 @@
           "photosPermission": "Mercaboot necesita tus fotos para que puedas elegir el logo de tu negocio o tu foto de perfil.",
           "cameraPermission": false,
           "microphonePermission": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Mercaboot usa tu ubicación para mostrarte primero los negocios más cercanos y decirte a qué distancia están. No se guarda ni se comparte.",
+          "locationWhenInUsePermission": "Mercaboot usa tu ubicación para mostrarte primero los negocios más cercanos y decirte a qué distancia están. No se guarda ni se comparte.",
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false
         }
       ]
     ]

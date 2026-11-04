@@ -2,15 +2,17 @@
 /**
  * Códigos de reclamo de los negocios del directorio.
  *
- * Qué hace:   crea un código secreto para un negocio y te da la línea que se pega en src/data/reclamo.ts.
- *             El código se lo entregas (en persona o por WhatsApp) al dueño de verdad. En la app solo queda
+ * Qué hace:   crea un código secreto para un negocio y te da el SQL que se pega en Supabase (SQL Editor).
+ *             El código se lo entregas (en persona o por WhatsApp) al dueño de verdad. En la nube solo queda
  *             una "huella" (hash) del código, nunca el código escrito.
  *
  * Cómo usarlo (desde la carpeta del proyecto):
- *   node scripts/codigo-reclamo.mjs --todos                    → códigos para todas las tiendas de src/data/semilla.ts
- *   node scripts/codigo-reclamo.mjs carniceria-keren           → un código nuevo para esa tienda
+ *   node scripts/codigo-reclamo.mjs carniceria-keren
+ *       → código nuevo para una tienda que YA existe en el directorio (reemplaza el anterior)
+ *   node scripts/codigo-reclamo.mjs nueva-tienda "Nombre de la tienda" "Giro"
+ *       → agrega una tienda nueva al directorio, con su código
  *   node scripts/codigo-reclamo.mjs --revisar carniceria-keren K7M2-9QXP-4HWD
- *                                                              → dice si ese código corresponde al que está en la app
+ *       → dice si ese código corresponde al que quedó en supabase/esquema.sql
  *
  * Importante: guarda los códigos en un lugar privado (no en el proyecto ni en GitHub).
  */
@@ -26,7 +28,9 @@ const ALFABETO = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const LARGO = 12;
 
 const normalizar = (t) => t.toUpperCase().replace(/[^A-Z0-9]/g, '');
+// Debe ser idéntico a lo que calcula la función comprobar_reclamo de supabase/esquema.sql.
 const huella = (id, codigo) => createHash('sha256').update(`${id}:${normalizar(codigo)}:mercaboot-reclamo`).digest('hex');
+const sql = (t) => `'${String(t).replace(/'/g, "''")}'`;
 
 function codigoNuevo() {
   let c = '';
@@ -34,47 +38,56 @@ function codigoNuevo() {
   return c.match(/.{4}/g).join('-');
 }
 
-function idsDelDirectorio() {
-  const texto = readFileSync(join(raiz, 'src/data/semilla.ts'), 'utf8');
-  return [...texto.matchAll(/^\s+id:\s*'([^']+)'/gm)].map((m) => m[1]);
+function huellaGuardada(id) {
+  const texto = readFileSync(join(raiz, 'supabase/esquema.sql'), 'utf8');
+  const m = texto.match(new RegExp(`\\(\\s*'${id.replace(/[^a-z0-9-]/g, '')}'\\s*,\\s*'([0-9a-f]{64})'`));
+  return m ? m[1] : undefined;
 }
 
-function huellasGuardadas() {
-  const texto = readFileSync(join(raiz, 'src/data/reclamo.ts'), 'utf8');
-  return Object.fromEntries([...texto.matchAll(/^\s+'([^']+)':\s*'([0-9a-f]{64})'/gm)].map((m) => [m[1], m[2]]));
-}
-
-const [, , a, b] = process.argv;
-const c = process.argv.slice(4).join(' '); // el código puede venir con espacios: ky4q rvmc txp5
+const [, , a, b, c] = process.argv;
 
 if (a === '--revisar') {
-  if (!b || !c) {
+  const codigo = process.argv.slice(4).join(' '); // el código puede venir con espacios: ky4q rvmc txp5
+  if (!b || !codigo) {
     console.log('Uso: node scripts/codigo-reclamo.mjs --revisar <id-del-negocio> <código>');
     process.exit(1);
   }
-  const esperado = huellasGuardadas()[b];
+  const esperado = huellaGuardada(b);
   if (!esperado) {
-    console.log(`«${b}» no tiene código guardado en src/data/reclamo.ts.`);
+    console.log(`«${b}» no tiene código guardado en supabase/esquema.sql.`);
     process.exit(1);
   }
-  const ok = huella(b, c) === esperado;
+  const ok = huella(b, codigo) === esperado;
   console.log(ok ? `✔ El código SÍ corresponde a «${b}».` : `✘ El código NO corresponde a «${b}».`);
   process.exit(ok ? 0 : 1);
 }
 
-const ids = a === '--todos' ? idsDelDirectorio() : a ? [a] : [];
-if (!ids.length) {
-  console.log('Uso:\n  node scripts/codigo-reclamo.mjs --todos\n  node scripts/codigo-reclamo.mjs <id-del-negocio>\n  node scripts/codigo-reclamo.mjs --revisar <id-del-negocio> <código>');
+const id = (a ?? '').trim();
+if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(id)) {
+  console.log(
+    'Uso:\n' +
+      '  node scripts/codigo-reclamo.mjs <id-del-negocio>                       (código nuevo para una tienda que ya existe)\n' +
+      '  node scripts/codigo-reclamo.mjs <id-nuevo> "Nombre" "Giro"            (tienda nueva en el directorio)\n' +
+      '  node scripts/codigo-reclamo.mjs --revisar <id-del-negocio> <código>\n' +
+      'El id va en minúsculas y con guiones, por ejemplo: carniceria-keren',
+  );
   process.exit(1);
 }
 
-const lineas = [];
-console.log('\nCÓDIGOS DE RECLAMO (entrégaselos solo a cada dueño y guárdalos en privado):\n');
-for (const id of ids) {
-  const codigo = codigoNuevo();
-  console.log(`  ${id.padEnd(28)} ${codigo}`);
-  lineas.push(`  '${id}': '${huella(id, codigo)}',`);
+const codigo = codigoNuevo();
+const h = huella(id, codigo);
+
+console.log(`\nCÓDIGO DE RECLAMO de «${id}» (entrégaselo solo a su dueño y guárdalo en privado):\n`);
+console.log(`  ${codigo}\n`);
+console.log('Pega esto en Supabase → SQL Editor → Run:\n');
+if (b) {
+  const giro = c ?? 'Negocio';
+  console.log(`insert into public.negocios (id, nombre, giro, a_domicilio, abierto) values (${sql(id)}, ${sql(b)}, ${sql(giro)}, false, true)`);
+  console.log('on conflict (id) do nothing;\n');
+  console.log('insert into public.negocios_reclamo (negocio_id, huella, original) values');
+  console.log(`  (${sql(id)}, ${sql(h)},`);
+  console.log(`   ${sql(JSON.stringify({ nombre: b, giro }))})`);
+  console.log('on conflict (negocio_id) do update set huella = excluded.huella;\n');
+} else {
+  console.log(`update public.negocios_reclamo set huella = ${sql(h)} where negocio_id = ${sql(id)};\n`);
 }
-console.log('\nPega estas líneas dentro de HASHES_RECLAMO en src/data/reclamo.ts (reemplazan a las anteriores del mismo negocio):\n');
-console.log(lineas.join('\n'));
-console.log('');

@@ -100,3 +100,9 @@ const CATEGORIA_POR_GIRO: Record<string, CategoriaProducto> = {
 };
 
 export const categoriaInicial = (giro?: string): CategoriaProducto => (giro && CATEGORIA_POR_GIRO[giro]) || 'otro';
+
+/* ───────── chat ───────── */
+
+/** Mensajes de un toque para no escribir lo de siempre. */
+export const RESPUESTAS_RAPIDAS_CLIENTE = ['¿Qué hay hoy?', '¿A qué hora cierran?', '¿Hacen entregas a domicilio?'];
+export const RESPUESTAS_RAPIDAS_COMERCIANTE = ['Sí hay', 'Ya se acabó', 'Llega mañana'];

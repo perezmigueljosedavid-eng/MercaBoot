@@ -3,7 +3,8 @@ import { Pressable, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { nombreCategoria } from '../../data/contenido';
-import { abrirTelefono } from '../../lib/contacto';
+import { abrirMapas, abrirTelefono, distanciaA, etiquetaDistancia } from '../../lib/geo';
+import { useUbicacion } from '../../lib/ubicacion';
 import { useStore } from '../../store';
 import { haceCuanto, textoPrecio } from '../../ui/bits';
 import { Icon, IconName } from '../../ui/Icon';
@@ -29,6 +30,7 @@ export default function Negocio() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { s, cuenta, favoritos, toggleFavorito, cambiarModo } = useStore();
   const insets = useSafeAreaInsets();
+  const { coords } = useUbicacion();
 
   const n = s.negocios.find((x) => x.id === id);
   const productos = useMemo(() => s.productos.filter((p) => p.negocioId === id), [s.productos, id]);
@@ -52,6 +54,7 @@ export default function Negocio() {
   const disponibles = productos.filter((p) => p.disponible);
   const agotados = productos.filter((p) => !p.disponible);
   const ultima = productos.reduce((m, p) => Math.max(m, p.actualizado), 0);
+  const dist = etiquetaDistancia(distanciaA(n, coords));
 
   const fila = (p: (typeof productos)[number]) => (
     <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14 }}>
@@ -113,13 +116,21 @@ export default function Negocio() {
         ) : null}
 
         <View style={{ gap: 8 }}>
-          <Dato icono="pin" texto={n.direccion || 'Dirección sin registrar.'} />
+          <Dato icono="pin" texto={[n.direccion, dist].filter(Boolean).join(' · ') || 'Dirección sin registrar. Usa «Cómo llegar» para ver el mapa.'} />
           {n.horario ? <Dato icono="clock" texto={n.horario} /> : null}
           {n.telefono ? <Dato icono="phone" texto={n.telefono} /> : null}
           {n.aDomicilio && n.zonaEntrega ? <Dato icono="navigation" texto={`Entrega a domicilio: ${n.zonaEntrega}`} /> : null}
         </View>
 
-        {n.telefono ? <Btn label="Llamar" variant="outline" h={46} r={12} size={14} onPress={() => abrirTelefono(n.telefono as string)} /> : null}
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Btn label="Cómo llegar" h={46} r={12} size={14} flex={1} onPress={() => abrirMapas(n)} />
+          {n.telefono ? (
+            <Btn label="Llamar" variant="outline" h={46} r={12} size={14} flex={1} onPress={() => abrirTelefono(n.telefono as string)} />
+          ) : null}
+          {reclamado && esCliente ? (
+            <Btn label="Chatear" variant="outline" h={46} r={12} size={14} flex={1} onPress={() => router.push(`/chat-negocio/${n.id}`)} />
+          ) : null}
+        </View>
 
         {esCliente ? (
           <Pressable

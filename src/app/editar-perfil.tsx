@@ -21,9 +21,9 @@ function Mensaje({ m }: { m: Aviso }) {
 export default function EditarPerfil() {
   const { cuenta, actualizarCuenta, cambiarPassword } = useStore();
   const [nombre, setNombre] = useState(cuenta?.nombre ?? '');
-  const [correo, setCorreo] = useState(cuenta?.correo ?? '');
   const [telefono, setTelefono] = useState(cuenta?.telefono ?? '');
   const [datos, setDatos] = useState<Aviso>(null);
+  const [guardando, setGuardando] = useState(false);
 
   const [actual, setActual] = useState('');
   const [nueva, setNueva] = useState('');
@@ -33,9 +33,16 @@ export default function EditarPerfil() {
 
   if (!cuenta) return null;
 
-  function guardar() {
-    const err = actualizarCuenta({ nombre, correo, telefono });
+  async function guardar() {
+    setGuardando(true);
+    const err = await actualizarCuenta({ nombre, telefono });
+    setGuardando(false);
     setDatos(err ? { ok: false, texto: err } : { ok: true, texto: 'Guardamos tus datos.' });
+  }
+
+  async function cambiarFoto(uri: string | undefined) {
+    const err = await actualizarCuenta({ fotoUri: uri });
+    if (err) setDatos({ ok: false, texto: err });
   }
 
   async function guardarClave() {
@@ -66,18 +73,22 @@ export default function EditarPerfil() {
             uri={cuenta.fotoUri}
             nombre={cuenta.nombre}
             redondo
-            onChange={(uri) => actualizarCuenta({ fotoUri: uri })}
+            onChange={cambiarFoto}
           />
           <Field label="Nombre" value={nombre} onChangeText={setNombre} autoCapitalize="words" textContentType="name" />
-          <Field
-            label="Correo electrónico"
-            value={correo}
-            onChangeText={setCorreo}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            autoCorrect={false}
-            textContentType="emailAddress"
-          />
+          <View style={{ gap: 6 }}>
+            <T size={14} weight={600}>
+              Correo electrónico
+            </T>
+            <View style={{ minHeight: 50, justifyContent: 'center', paddingHorizontal: 16, borderRadius: 14, backgroundColor: C.grey }}>
+              <T size={15} color={C.greyText}>
+                {cuenta.correo}
+              </T>
+            </View>
+            <T size={12} lh={1.4} color={C.muted}>
+              Tu correo es tu usuario para entrar, por eso no se puede cambiar.
+            </T>
+          </View>
           <Field
             label="Teléfono (10 dígitos)"
             value={telefono}
@@ -87,7 +98,7 @@ export default function EditarPerfil() {
             maxLength={14}
           />
           <Mensaje m={datos} />
-          <Btn label="Guardar cambios" onPress={guardar} />
+          <Btn label={guardando ? 'Guardando…' : 'Guardar cambios'} onPress={guardando ? undefined : guardar} />
         </Card>
 
         <Card style={{ gap: 14, padding: 16 }}>

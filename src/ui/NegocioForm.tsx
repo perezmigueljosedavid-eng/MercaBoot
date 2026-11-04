@@ -1,14 +1,15 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { GIROS } from '../data/contenido';
 import { DONDE_PEDIR_CODIGO } from '../data/reclamo';
-import type { AltaNegocio } from '../store';
+import type { AltaNegocio, NegocioLibre } from '../store';
 import { useStore } from '../store';
 import { Confirmar } from './Dialogo';
 import { GiroCampo } from './GiroCampo';
 import { Icon } from './Icon';
-import { Card, Field } from './kit';
+import { Btn, Card, Field } from './kit';
 import { Logo } from './Logo';
+import { UbicacionCampo, type DatosUbicacion } from './UbicacionCampo';
 import { T } from './T';
 import { C } from './theme';
 
@@ -19,14 +20,50 @@ type ModoNegocio = 'directorio' | 'nuevo';
  * Lo usan el registro (comerciante nuevo) y «Abrir mi negocio» (cliente que también quiere vender).
  */
 export function useNegocioForm(reclamarId?: string) {
-  const { s } = useStore();
-  const libres = useMemo(() => s.negocios.filter((n) => !n.duenoId), [s.negocios]);
-  const [modo, setModo] = useState<ModoNegocio>(libres.length ? 'directorio' : 'nuevo');
-  const [elegido, setElegido] = useState<string | null>(libres.some((n) => n.id === reclamarId) ? (reclamarId as string) : null);
+  const { negociosLibres } = useStore();
+  /** null = todavía cargando o sin conexión (ver `errorLista`). */
+  const [libres, setLibres] = useState<NegocioLibre[] | null>(null);
+  const [errorLista, setErrorLista] = useState(false);
+  const [modoElegido, setModo] = useState<ModoNegocio | null>(null);
+  const [elegido, setElegido] = useState<string | null>(null);
   const [codigo, setCodigo] = useState('');
   const [nombre, setNombre] = useState('');
   const [giro, setGiro] = useState(GIROS[0].nombre);
-  const [direccion, setDireccion] = useState('');
+  const [ubic, setUbic] = useState<DatosUbicacion>({ direccion: '' });
+
+  /** Guarda lo que respondió la nube (o marca el error si no se pudo consultar). */
+  const aplicar = useCallback(
+    (lista: NegocioLibre[] | null) => {
+      if (lista === null) {
+        setErrorLista(true);
+        return;
+      }
+      setErrorLista(false);
+      setLibres(lista);
+      setElegido((prev) => prev ?? (lista.some((n) => n.id === reclamarId) ? (reclamarId as string) : null));
+    },
+    [reclamarId],
+  );
+
+  useEffect(() => {
+    let vivo = true;
+    negociosLibres().then((lista) => {
+      if (vivo) aplicar(lista);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [negociosLibres, aplicar]);
+
+  /** «Intentar de nuevo»: vuelve a mostrar «Cargando…» mientras se consulta. */
+  const recargar = () => {
+    setErrorLista(false);
+    return negociosLibres().then(aplicar);
+  };
+
+  const cargando = libres === null && !errorLista;
+  const lista = libres ?? [];
+  const modo: ModoNegocio = modoElegido ?? (lista.length ? 'directorio' : 'nuevo');
 
   /** Elige un negocio de la lista (o ninguno). Cambiar de negocio borra el código escrito para el anterior. */
   function elegir(id: string | null) {
@@ -34,11 +71,12 @@ export function useNegocioForm(reclamarId?: string) {
     setCodigo('');
   }
 
-  const negocioElegido = libres.find((n) => n.id === elegido) ?? null;
+  const negocioElegido = lista.find((n) => n.id === elegido) ?? null;
 
   /** El negocio listo para guardar, o el mensaje de lo que falta. */
   function validar(): { alta: AltaNegocio } | { error: string } {
-    if (modo === 'directorio' && libres.length) {
+    if (cargando) return { error: 'Estamos cargando la lista de negocios. Espera un momento.' };
+    if (modo === 'directorio' && lista.length) {
       if (!negocioElegido) return { error: 'Toca el negocio que es tuyo, o elige «Mi negocio es nuevo».' };
       if (!codigo.trim()) return { error: `Escribe el código de reclamo de «${negocioElegido.nombre}». Si eres su dueño, pídelo ${DONDE_PEDIR_CODIGO}.` };
       return { alta: { reclamarId: negocioElegido.id, codigo } };
@@ -50,13 +88,19 @@ export function useNegocioForm(reclamarId?: string) {
         nuevo: {
           nombre: nombre.trim(),
           giro: giro.trim(),
-          direccion: direccion.trim() || undefined,
+          direccion: ubic.direccion.trim() || undefined,
+          lat: ubic.lat,
+          lng: ubic.lng,
+          mapsUrl: ubic.mapsUrl,
         },
       },
     };
   }
 
-  return { libres, modo, setModo, elegido, negocioElegido, elegir, codigo, setCodigo, nombre, setNombre, giro, setGiro, direccion, setDireccion, validar };
+  return {
+    libres: lista, cargando, errorLista, recargar, modo, setModo, elegido, negocioElegido, elegir, codigo, setCodigo, nombre, setNombre,
+    giro, setGiro, ubic, setUbic, validar,
+  };
 }
 
 export type NegocioFormEstado = ReturnType<typeof useNegocioForm>;
@@ -65,6 +109,22 @@ export function NegocioForm({ f, onCambio }: { f: NegocioFormEstado; onCambio: (
   const { libres, modo } = f;
   return (
     <View style={{ gap: 16 }}>
+      {f.errorLista ? (
+        <Card style={{ gap: 10, padding: 14, backgroundColor: C.amberTint, borderColor: C.amber }}>
+          <T size={14} weight={700} color={C.amberDeep}>
+            No pudimos cargar la lista de negocios
+          </T>
+          <T size={13} lh={1.45} color={C.amberDeep}>
+            Revisa tu conexión a internet. Si tu negocio es nuevo puedes registrarlo de todos modos con «Mi negocio es nuevo».
+          </T>
+          <Btn label="Intentar de nuevo" variant="outline" h={42} r={12} size={14} weight={600} onPress={() => void f.recargar()} />
+        </Card>
+      ) : null}
+      {f.cargando ? (
+        <T size={13} color={C.muted}>
+          Cargando los negocios de la comunidad…
+        </T>
+      ) : null}
       {libres.length ? (
         <View style={{ flexDirection: 'row', gap: 4, padding: 4, borderRadius: 14, backgroundColor: C.seg }}>
           {(
@@ -113,14 +173,13 @@ export function NegocioForm({ f, onCambio }: { f: NegocioFormEstado; onCambio: (
                   }}
                 >
                   <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderWidth: 2, borderColor: on ? C.green : C.line }}>
-                    <Logo nombre={n.nombre} uri={n.logoUri} size={48} />
+                    <Logo nombre={n.nombre} size={48} />
                     <View style={{ flex: 1, gap: 2 }}>
                       <T size={15} weight={700}>
                         {n.nombre}
                       </T>
                       <T size={13} color={C.muted}>
                         {n.giro}
-                        {n.direccion ? ` · ${n.direccion}` : ''}
                       </T>
                     </View>
                     {on ? <Icon name="check" size={22} color={C.green} /> : null}
@@ -192,17 +251,13 @@ export function NegocioForm({ f, onCambio }: { f: NegocioFormEstado; onCambio: (
               onCambio();
             }}
           />
-          <Field
-            label="Dirección o referencia (opcional)"
-            h={50}
-            gap={6}
-            placeholder="Ej. Calle Hidalgo 12, frente a la iglesia"
-            value={f.direccion}
-            onChangeText={(t) => {
-              f.setDireccion(t);
+          <UbicacionCampo
+            value={f.ubic}
+            nombre={f.nombre.trim() || 'Mi negocio'}
+            onChange={(u) => {
+              f.setUbic(u);
               onCambio();
             }}
-            autoCapitalize="sentences"
           />
         </View>
       )}
