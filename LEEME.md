@@ -47,6 +47,8 @@ Todavía **no** incluye el chatbot / asistente de recetas, las reseñas, los avi
 
 Se hace una sola vez y es gratis. Necesitas una cuenta en [supabase.com](https://supabase.com).
 
+> **Estado del proyecto del equipo:** el proyecto de Supabase «MercaBoot» ya tiene el esquema instalado y `src/config.ts` ya trae su dirección y su llave pública (anon). Solo queda el punto 3 (apagar «Confirm email»). Los pasos de abajo sirven para repetirlo con otro proyecto.
+
 1. **New project**: ponle un nombre (por ejemplo `mercaboot`), inventa una contraseña de base de datos (guárdala en privado) y elige la región más cercana. Espera un par de minutos a que termine de crearse.
 2. Menú **SQL Editor** → **New query** → pega **todo** el archivo [`supabase/esquema.sql`](supabase/esquema.sql) → **Run**. Debe terminar sin errores (se puede ejecutar más de una vez sin problema; no borra datos). Esto crea las tablas, las reglas de seguridad, el tiempo real y las 3 tiendas del directorio.
 3. **Authentication → Sign In / Providers → Email** (el nombre puede cambiar un poco): **apaga «Confirm email»** y guarda. Sin esto, cada cuenta nueva tendría que confirmarse desde un correo y el registro se quedaría esperando.

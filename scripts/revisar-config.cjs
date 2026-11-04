@@ -13,7 +13,7 @@ const archivo = process.argv[2] || 'src/config.ts';
 const texto = fs.readFileSync(archivo, 'utf8');
 
 function tomar(nombre) {
-  const m = texto.match(new RegExp(`const ${nombre} = '([^']*)'`));
+  const m = texto.match(new RegExp(`const ${nombre}\\s*=\\s*'([^']*)'`));
   return m ? m[1].trim() : '';
 }
 
