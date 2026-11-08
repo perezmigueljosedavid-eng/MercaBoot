@@ -1,0 +1,1 @@
+__d(function(g,r,i,a,m,e,d){"use strict";Object.defineProperty(e,'__esModule',{value:!0}),Object.defineProperty(e,"default",{enumerable:!0,get:function(){return o}}),r(d[0]);var t=r(d[1]),n=r(d[2]),c=r(d[3]);function o(){const{id:o}=(0,t.useLocalSearchParams)();return(0,c.jsx)(n.ChatView,{modo:"comerciante",id:o,showBack:!0})}},762,[12,794,847,6]);
