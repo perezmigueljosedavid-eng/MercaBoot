@@ -61,8 +61,9 @@ export function Stepper({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={texto}
-      accessibilityState={{ disabled: apagado }}
-      onPress={apagado ? undefined : accion}
+      accessibilityHint={apagado ? 'Ya no hay más disponibles; al tocarlo te explica cuántos quedan' : undefined}
+      // «Apagado» solo cambia el color: al tocarlo el botón responde y explica por qué no sube (nunca queda mudo).
+      onPress={accion}
       style={{
         width: lado,
         height: lado,

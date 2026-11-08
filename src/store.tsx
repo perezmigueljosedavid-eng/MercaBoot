@@ -5,11 +5,13 @@ import * as Linking from 'expo-linking';
 import type { RealtimeChannel, Session } from '@supabase/supabase-js';
 import { NUBE_CONFIGURADA } from './config';
 import type {
+  Aviso,
   CategoriaProducto,
   ClienteFrecuente,
   Conversacion,
   Cuenta,
   EntregaPedido,
+  Etiqueta,
   LineaCarrito,
   LineaPedido,
   Mensaje,
@@ -17,9 +19,13 @@ import type {
   PagoPedido,
   Pedido,
   Producto,
+  Resena,
   Rol,
+  TipoAviso,
+  TipoProducto,
 } from './data/tipos';
 import {
+  avisoDeFila,
   conversacionDeFila,
   esErrorDeRed,
   favoritoDeFila,
@@ -30,8 +36,10 @@ import {
   negocioDeFila,
   pedidoDeFila,
   productoDeFila,
+  resenaDeFila,
   textoError,
   type Favorito,
+  type FilaAviso,
   type FilaConversacion,
   type FilaDetalle,
   type FilaFavorito,
@@ -41,6 +49,7 @@ import {
   type FilaPedido,
   type FilaPerfil,
   type FilaProducto,
+  type FilaResena,
 } from './lib/nube';
 import { avisoDeCambio, cantidadTexto, disponibleParaPedir, esActivo, pasoCantidad, redondear, totales } from './lib/pedidos';
 import { supabase } from './lib/supabase';
@@ -49,7 +58,7 @@ import { supabase } from './lib/supabase';
  * Estado de la app, guardado en la nube (Supabase).
  *
  *  · Cuentas: Supabase Auth (correo + contraseña); la sesión queda en el teléfono.
- *  · Datos: negocios, productos, favoritos, conversaciones, mensajes, pedidos y clientes frecuentes viven en la base de datos compartida.
+ *  · Datos: negocios, productos, favoritos, conversaciones, mensajes, pedidos, clientes frecuentes, reseñas y avisos viven en la base de datos compartida.
  *  · Carrito: se arma en el teléfono (es de un solo negocio); al apartarlo, la base de datos revisa todo y crea el pedido.
  *  · En vivo: la app escucha los cambios (Supabase Realtime). Si el aviso en vivo no está disponible, vuelve a
  *    preguntar cada pocos segundos, así que dos teléfonos siempre acaban viendo lo mismo.
@@ -93,6 +102,27 @@ export interface DatosProducto {
   porEncargo?: boolean;
   /** Existencias (opcional): sin valor = no se lleva la cuenta y no hay límite. */
   cantidad?: number;
+  /** Lo que lee el asistente de cocina: para cocinar o ya preparado, sabor/momento/qué lleva, e ingrediente reconocido. */
+  tipo?: TipoProducto;
+  etiquetas?: Etiqueta[];
+  ingrediente?: string;
+}
+
+/** Un aviso nuevo del comerciante. `hasta` (ms): sin valor, «ya no hay / ya hay / cerrado» duran hasta el fin del día y lo demás no vence. */
+export interface DatosAviso {
+  tipo: TipoAviso;
+  texto: string;
+  productoId?: string;
+  hasta?: number;
+  festividad?: string;
+}
+
+/** Una reseña nueva (o el cambio de la que ya se dejó). */
+export interface DatosResena {
+  negocioId: string;
+  estrellas: number;
+  etiquetas: string[];
+  comentario: string;
 }
 
 /** Cómo quiere el cliente recibir y pagar su pedido. */
@@ -152,6 +182,10 @@ export interface Datos {
   pedidos: Pedido[];
   /** Clientes frecuentes: los del negocio de esta cuenta, y los negocios que la nombraron a ella. */
   frecuentes: ClienteFrecuente[];
+  /** Avisos de los negocios (también los ya vencidos: usa `avisosVigentes`). */
+  avisos: Aviso[];
+  /** Reseñas con estrellas de todos los negocios. */
+  resenas: Resena[];
 }
 
 /** ¿Hay mensajes que esta persona todavía no lee? (`soyCliente`: si es el cliente o el dueño del negocio) */
@@ -165,6 +199,28 @@ export function textoUltimo(c: Conversacion, miId: string): string {
   return c.ultimoAutor === miId ? `Tú: ${c.ultimoTexto}` : c.ultimoTexto;
 }
 
+/** Último instante del día (en el teléfono) del momento dado. */
+export function finDelDia(d = Date.now()) {
+  const f = new Date(d);
+  f.setHours(23, 59, 59, 999);
+  return f.getTime();
+}
+
+/** Promedio de estrellas (con un decimal) y cuántas reseñas tiene un negocio. */
+export function ratingDe(negocioId: string, resenas: Resena[]) {
+  const r = resenas.filter((x) => x.negocioId === negocioId);
+  if (!r.length) return { promedio: null as number | null, total: 0 };
+  const suma = r.reduce((a, x) => a + x.estrellas, 0);
+  return { promedio: Math.round((suma / r.length) * 10) / 10, total: r.length };
+}
+
+export const textoRating = (promedio: number | null) => (promedio == null ? 'Sin reseñas' : `★ ${promedio.toFixed(1)}`);
+
+/** Los avisos que todavía no vencen, del más nuevo al más viejo. */
+export function avisosVigentes(avisos: Aviso[], ahora = Date.now()) {
+  return avisos.filter((a) => !a.hasta || a.hasta > ahora).sort((a, b) => b.fecha - a.fecha);
+}
+
 /* ───────── estado interno ───────── */
 
 interface Base {
@@ -176,9 +232,22 @@ interface Base {
   mensajes: Record<string, Mensaje[]>;
   pedidos: Pedido[];
   frecuentes: ClienteFrecuente[];
+  avisos: Aviso[];
+  resenas: Resena[];
 }
 
-const VACIO: Base = { perfil: null, negocios: [], productos: [], favs: [], conversaciones: [], mensajes: {}, pedidos: [], frecuentes: [] };
+const VACIO: Base = {
+  perfil: null,
+  negocios: [],
+  productos: [],
+  favs: [],
+  conversaciones: [],
+  mensajes: {},
+  pedidos: [],
+  frecuentes: [],
+  avisos: [],
+  resenas: [],
+};
 
 type Accion =
   | { t: 'limpiar' }
@@ -192,6 +261,8 @@ type Accion =
       conversaciones: Conversacion[];
       pedidos: Pedido[];
       frecuentes: ClienteFrecuente[];
+      avisos: Aviso[];
+      resenas: Resena[];
     }
   | { t: 'neg'; n: Negocio }
   | { t: 'negDel'; id: string }
@@ -207,7 +278,12 @@ type Accion =
   | { t: 'ped'; p: Pedido }
   | { t: 'pedDel'; id: string }
   | { t: 'frec'; f: ClienteFrecuente }
-  | { t: 'frecDel'; id: string };
+  | { t: 'frecDel'; id: string }
+  | { t: 'avi'; a: Aviso }
+  | { t: 'aviDel'; id: string }
+  | { t: 'avisosDe'; negocioId: string; avisos: Aviso[] }
+  | { t: 'res'; r: Resena }
+  | { t: 'resDel'; id: string };
 
 const upsert = <A extends { id: string }>(lista: A[], x: A): A[] => {
   const i = lista.findIndex((y) => y.id === x.id);
@@ -244,6 +320,8 @@ function reductor(b: Base, a: Accion): Base {
         conversaciones: a.conversaciones,
         pedidos: a.pedidos,
         frecuentes: a.frecuentes,
+        avisos: a.avisos,
+        resenas: a.resenas,
       };
     case 'neg':
       return { ...b, negocios: upsert(b.negocios, a.n) };
@@ -285,6 +363,16 @@ function reductor(b: Base, a: Accion): Base {
       return { ...b, frecuentes: upsert(b.frecuentes, a.f) };
     case 'frecDel':
       return { ...b, frecuentes: b.frecuentes.filter((x) => x.id !== a.id) };
+    case 'avi':
+      return { ...b, avisos: upsert(b.avisos, a.a) };
+    case 'aviDel':
+      return { ...b, avisos: b.avisos.filter((x) => x.id !== a.id) };
+    case 'avisosDe':
+      return { ...b, avisos: [...b.avisos.filter((x) => x.negocioId !== a.negocioId), ...a.avisos] };
+    case 'res':
+      return { ...b, resenas: upsert(b.resenas, a.r) };
+    case 'resDel':
+      return { ...b, resenas: b.resenas.filter((x) => x.id !== a.id) };
     default:
       return b;
   }
@@ -310,6 +398,8 @@ interface Cache {
   conversaciones: Conversacion[];
   pedidos: Pedido[];
   frecuentes: ClienteFrecuente[];
+  avisos?: Aviso[];
+  resenas?: Resena[];
 }
 
 /* ───────── contexto ───────── */
@@ -332,6 +422,8 @@ interface Ctx {
   estadoRed: EstadoRed;
   /** Aviso corto y pasajero (por ejemplo «Sin conexión»). */
   aviso: string | null;
+  /** Muestra un aviso corto y pasajero abajo de la pantalla (se quita solo). Sirve para que un botón siempre responda. */
+  avisar: (texto: string) => void;
   /** Conversaciones con mensajes sin leer, según el modo en que está la cuenta. */
   chatsSinLeer: number;
   refrescar: () => Promise<void>;
@@ -361,6 +453,12 @@ interface Ctx {
   editarProducto: (id: string, p: Partial<DatosProducto>) => Promise<string | null>;
   eliminarProducto: (id: string) => Promise<string | null>;
   setDisponible: (id: string, v: boolean) => void;
+  /** El comerciante publica un aviso (se acabó algo, ya hay, promoción, regalo…). Devuelve el motivo si no se pudo. */
+  publicarAviso: (a: DatosAviso) => Promise<string | null>;
+  quitarAviso: (id: string) => Promise<string | null>;
+  /** El cliente deja (o cambia) su reseña de un negocio. Devuelve el motivo si no se pudo. */
+  agregarResena: (r: DatosResena) => Promise<string | null>;
+  borrarResena: (negocioId: string) => Promise<string | null>;
 
   /** Mensajes de una conversación (vacío hasta que se abre con `observarChat`). */
   mensajesDe: (convId: string) => Mensaje[];
@@ -534,7 +632,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             () => {},
           );
         }
-        const [perfil, negocios, productos, favs, convs, peds, frecs] = await Promise.all([
+        const [perfil, negocios, productos, favs, convs, peds, frecs, avs, ress] = await Promise.all([
           supabase.from('perfiles').select('id,nombre,correo,telefono,foto_uri').eq('id', id).maybeSingle(),
           supabase.from('negocios').select('*').order('creado', { ascending: true }),
           supabase.from('productos').select('*'),
@@ -542,8 +640,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           supabase.from('conversaciones').select('*'),
           supabase.from('pedidos').select('*').order('creado', { ascending: false }).limit(300),
           supabase.from('clientes_frecuentes').select('*'),
+          supabase.from('avisos').select('*').order('creado', { ascending: false }).limit(400),
+          supabase.from('resenas').select('*').order('creado', { ascending: false }).limit(2000),
         ]);
         if (uidRef.current !== id) return;
+        // Los avisos y las reseñas son un extra: si todavía no existen en la base (no se corrió la actualización), la app sigue funcionando sin ellos.
         const error = [perfil, negocios, productos, favs, convs, peds, frecs].map((r) => r.error).find(Boolean);
         if (error) {
           if (esErrorDeRed(error)) setEstadoRed('sin-internet');
@@ -559,6 +660,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           conversaciones: ((convs.data ?? []) as FilaConversacion[]).map(conversacionDeFila),
           pedidos: ((peds.data ?? []) as FilaPedido[]).map(pedidoDeFila),
           frecuentes: ((frecs.data ?? []) as FilaFrecuente[]).map(frecuenteDeFila),
+          avisos: avs.error ? baseRef.current.avisos : ((avs.data ?? []) as FilaAviso[]).map(avisoDeFila),
+          resenas: ress.error ? baseRef.current.resenas : ((ress.data ?? []) as FilaResena[]).map(resenaDeFila),
         });
         setEstadoRed(canalVivo.current ? 'en-vivo' : 'sin-vivo');
         // Los chats que están abiertos también se ponen al día.
@@ -651,6 +754,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           if (borrar) dispatch({ t: 'frecDel', id });
           else dispatch({ t: 'frec', f: frecuenteDeFila(nuevo as FilaFrecuente) });
           break;
+        case 'avisos':
+          if (borrar) dispatch({ t: 'aviDel', id });
+          else dispatch({ t: 'avi', a: avisoDeFila(nuevo as FilaAviso) });
+          break;
+        case 'resenas':
+          if (borrar) dispatch({ t: 'resDel', id });
+          else dispatch({ t: 'res', r: resenaDeFila(nuevo as FilaResena) });
+          break;
         default:
       }
     },
@@ -668,7 +779,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     (id: string) => {
       cerrarCanal();
       let canal = supabase.channel(`mercaboot-${id.slice(0, 8)}-${Date.now().toString(36)}`);
-      for (const tabla of ['negocios', 'productos', 'favoritos', 'conversaciones', 'mensajes', 'pedidos', 'clientes_frecuentes']) {
+      for (const tabla of ['negocios', 'productos', 'favoritos', 'conversaciones', 'mensajes', 'pedidos', 'clientes_frecuentes', 'avisos', 'resenas']) {
         canal = canal.on('postgres_changes', { event: '*', schema: 'public', table: tabla }, (p) =>
           alCambiar(tabla, p as unknown as Parameters<typeof alCambiar>[1]),
         );
@@ -767,6 +878,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         conversaciones: base.conversaciones,
         pedidos: base.pedidos,
         frecuentes: base.frecuentes,
+        avisos: base.avisos,
+        resenas: base.resenas,
       };
       let texto = JSON.stringify(c);
       if (texto.length > LIMITE_CACHE) {
@@ -780,7 +893,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (texto.length <= LIMITE_CACHE) AsyncStorage.setItem(claveCache(uid), texto).catch(() => {});
     }, 1500);
     return () => clearTimeout(t);
-  }, [uid, base.perfil, base.negocios, base.productos, base.favs, base.conversaciones, base.pedidos, base.frecuentes]);
+  }, [uid, base.perfil, base.negocios, base.productos, base.favs, base.conversaciones, base.pedidos, base.frecuentes, base.avisos, base.resenas]);
 
   useEffect(() => {
     estadoRedRef.current = estadoRed;
@@ -879,8 +992,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       conversaciones: base.conversaciones,
       pedidos: base.pedidos,
       frecuentes: base.frecuentes,
+      avisos: base.avisos,
+      resenas: base.resenas,
     }),
-    [base.negocios, base.productos, base.conversaciones, base.pedidos, base.frecuentes],
+    [base.negocios, base.productos, base.conversaciones, base.pedidos, base.frecuentes, base.avisos, base.resenas],
   );
 
   /* ───── cuenta ───── */
@@ -1200,6 +1315,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         categoria: d.categoria,
         por_encargo: !!d.porEncargo,
         cantidad: d.cantidad ?? null,
+        tipo: d.tipo ?? null,
+        etiquetas: d.etiquetas ?? [],
+        ingrediente: d.ingrediente ?? null,
       })
       .select('*')
       .single();
@@ -1230,6 +1348,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (d.cantidad != null && !(d.cantidad >= 0 && d.cantidad <= 99999999)) return 'Las existencias deben ser un número de 0 en adelante.';
       fila.cantidad = d.cantidad ?? null;
     }
+    if ('tipo' in d) fila.tipo = d.tipo ?? null;
+    if ('etiquetas' in d) fila.etiquetas = d.etiquetas ?? [];
+    if ('ingrediente' in d) fila.ingrediente = d.ingrediente ?? null;
     if (Object.keys(fila).length === 0) return null;
     const { data, error } = await supabase.from('productos').update(fila).eq('id', id).select('*');
     if (error) return (error as { code?: string }).code === '23505' ? 'Ya tienes un producto con ese nombre.' : textoError(error);
@@ -1266,6 +1387,81 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     },
     [avisar],
   );
+
+  /* ───── avisos del comerciante ───── */
+
+  const publicarAviso = useCallback<Ctx['publicarAviso']>(async (a) => {
+    const mio = miNegocio();
+    if (!mio) return 'Tu cuenta no administra ningún negocio.';
+    const texto = a.texto.trim();
+    if (!texto) return 'Escribe el aviso.';
+    const { data, error } = await supabase.rpc('publicar_aviso', {
+      p_tipo: a.tipo,
+      p_texto: texto,
+      p_producto: a.productoId ?? null,
+      p_hasta: a.hasta ? new Date(a.hasta).toISOString() : null,
+      p_festividad: a.festividad ?? null,
+    });
+    if (error) return textoError(error);
+    if (typeof data === 'string' && data) return data;
+    // El aviso (y, si hace falta, el producto que se agotó o llegó) se leen de nuevo para verlos de inmediato.
+    const [avs, prod] = await Promise.all([
+      supabase.from('avisos').select('*').eq('negocio_id', mio.id),
+      a.productoId ? supabase.from('productos').select('*').eq('id', a.productoId).maybeSingle() : Promise.resolve(null),
+    ]);
+    if (!avs.error && avs.data) dispatch({ t: 'avisosDe', negocioId: mio.id, avisos: (avs.data as FilaAviso[]).map(avisoDeFila) });
+    if (prod && !prod.error && prod.data) dispatch({ t: 'prod', p: productoDeFila(prod.data as FilaProducto) });
+    return null;
+  }, []);
+
+  const quitarAviso = useCallback<Ctx['quitarAviso']>(async (id) => {
+    const mio = miNegocio();
+    const previo = baseRef.current.avisos.find((x) => x.id === id);
+    if (!mio || !previo || previo.negocioId !== mio.id) return 'No encontramos ese aviso.';
+    dispatch({ t: 'aviDel', id });
+    const { error } = await supabase.rpc('quitar_aviso', { p_aviso: id });
+    if (error) {
+      dispatch({ t: 'avi', a: previo });
+      return textoError(error);
+    }
+    return null;
+  }, []);
+
+  /* ───── reseñas ───── */
+
+  const agregarResena = useCallback<Ctx['agregarResena']>(async (r) => {
+    const yo = uidRef.current;
+    if (!yo) return 'No hay una sesión activa.';
+    const neg = baseRef.current.negocios.find((n) => n.id === r.negocioId);
+    if (!neg) return 'Este negocio ya no está disponible.';
+    if (neg.duenoId === yo) return 'No puedes calificar tu propio negocio.';
+    const { data, error } = await supabase.rpc('guardar_resena', {
+      p_negocio: r.negocioId,
+      p_estrellas: r.estrellas,
+      p_etiquetas: r.etiquetas,
+      p_comentario: r.comentario.trim(),
+    });
+    if (error) return textoError(error);
+    if (typeof data === 'string' && data) return data;
+    const fila = await supabase.from('resenas').select('*').eq('negocio_id', r.negocioId).eq('autor_id', yo).maybeSingle();
+    if (!fila.error && fila.data) dispatch({ t: 'res', r: resenaDeFila(fila.data as FilaResena) });
+    else refrescar();
+    return null;
+  }, [refrescar]);
+
+  const borrarResena = useCallback<Ctx['borrarResena']>(async (negocioId) => {
+    const yo = uidRef.current;
+    if (!yo) return 'No hay una sesión activa.';
+    const previa = baseRef.current.resenas.find((x) => x.negocioId === negocioId && x.autorId === yo);
+    if (!previa) return null;
+    dispatch({ t: 'resDel', id: previa.id });
+    const { error } = await supabase.rpc('borrar_resena', { p_negocio: negocioId });
+    if (error) {
+      dispatch({ t: 'res', r: previa });
+      return textoError(error);
+    }
+    return null;
+  }, []);
 
   /* ───── chat ───── */
 
@@ -1554,6 +1750,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       pedidosPendientes,
       estadoRed,
       aviso,
+      avisar,
       chatsSinLeer,
       refrescar,
       negociosLibres,
@@ -1574,6 +1771,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       editarProducto,
       eliminarProducto,
       setDisponible,
+      publicarAviso,
+      quitarAviso,
+      agregarResena,
+      borrarResena,
       mensajesDe,
       observarChat,
       enviarComoCliente,
@@ -1594,9 +1795,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       quitarFrecuente,
     }),
     [
-      ready, datos, cuenta, negocio, favoritos, numFrecuentes, pedidosPendientes, estadoRed, aviso, chatsSinLeer, refrescar, negociosLibres, registrar,
+      ready, datos, cuenta, negocio, favoritos, numFrecuentes, pedidosPendientes, estadoRed, aviso, avisar, chatsSinLeer, refrescar, negociosLibres, registrar,
       entrar, salir, cambiarModo, comprobarReclamo, abrirNegocio, soltarNegocio, recuperarPassword, restablecerPassword, actualizarCuenta,
-      cambiarPassword, actualizarNegocio, toggleFavorito, agregarProducto, editarProducto, eliminarProducto, setDisponible, mensajesDe,
+      cambiarPassword, actualizarNegocio, toggleFavorito, agregarProducto, editarProducto, eliminarProducto, setDisponible, publicarAviso, quitarAviso, agregarResena, borrarResena, mensajesDe,
       observarChat, enviarComoCliente, enviarComoNegocio, marcarLeida, carrito, agregarAlCarrito, ponerCantidad, quitarDelCarrito, vaciarCarrito,
       crearPedido, accionPedido, lineasDe, datosPagoDe, leerDatosPago, guardarDatosPago, marcarFrecuente, quitarFrecuente,
     ],

@@ -1,8 +1,10 @@
 import type {
+  Aviso,
   CategoriaProducto,
   ClienteFrecuente,
   Conversacion,
   EntregaPedido,
+  Etiqueta,
   EstadoPago,
   EstadoPedido,
   LineaPedido,
@@ -11,7 +13,10 @@ import type {
   PagoPedido,
   Pedido,
   Producto,
+  Resena,
+  TipoAviso,
   TipoMensaje,
+  TipoProducto,
 } from '../data/tipos';
 
 /**
@@ -65,6 +70,32 @@ export interface FilaProducto {
   cantidad: number | string | null;
   apartado: number | string | null;
   actualizado: string;
+  /** Lo que lee el asistente de cocina (pueden faltar en copias guardadas de versiones anteriores). */
+  tipo?: string | null;
+  etiquetas?: string[] | null;
+  ingrediente?: string | null;
+}
+
+export interface FilaAviso {
+  id: string;
+  negocio_id: string;
+  tipo: string;
+  texto: string;
+  producto_id: string | null;
+  festividad: string | null;
+  creado: string;
+  hasta: string | null;
+}
+
+export interface FilaResena {
+  id: string;
+  negocio_id: string;
+  autor_id: string;
+  autor_nombre: string;
+  estrellas: number;
+  etiquetas: string[] | null;
+  comentario: string | null;
+  creado: string;
 }
 
 export interface FilaFavorito {
@@ -186,18 +217,53 @@ export const negocioDeFila = (f: FilaNegocio): Negocio => ({
   creado: ms(f.creado),
 });
 
-export const productoDeFila = (f: FilaProducto): Producto => ({
+const ETIQUETAS_VALIDAS: ReadonlySet<string> = new Set([
+  'dulce', 'salado', 'picante', 'acido', 'amargo', 'desayuno', 'comida', 'cena', 'botana', 'postre', 'bebida',
+  'carne', 'proteina', 'sinCarne', 'caliente',
+]);
+const TIPOS_AVISO_VALIDOS: ReadonlySet<string> = new Set(['agotado', 'hay', 'promo', 'regalo', 'cerrado', 'general']);
+
+export const productoDeFila = (f: FilaProducto): Producto => {
+  const etiquetas = (f.etiquetas ?? []).filter((e) => ETIQUETAS_VALIDAS.has(e)) as Etiqueta[];
+  return {
+    id: f.id,
+    negocioId: f.negocio_id,
+    nombre: f.nombre,
+    precio: num(f.precio),
+    unidad: f.unidad,
+    disponible: !!f.disponible,
+    categoria: f.categoria as CategoriaProducto,
+    // Vacío = el comerciante no lo corrigió: el asistente lo deduce del nombre.
+    tipo: f.tipo === 'ingrediente' || f.tipo === 'preparado' ? (f.tipo as TipoProducto) : undefined,
+    etiquetas: etiquetas.length > 0 ? etiquetas : undefined,
+    ingrediente: txt(f.ingrediente),
+    porEncargo: !!f.por_encargo,
+    cantidad: num(f.cantidad),
+    apartado: num(f.apartado) ?? 0,
+    actualizado: ms(f.actualizado),
+  };
+};
+
+export const avisoDeFila = (f: FilaAviso): Aviso => ({
   id: f.id,
   negocioId: f.negocio_id,
-  nombre: f.nombre,
-  precio: num(f.precio),
-  unidad: f.unidad,
-  disponible: !!f.disponible,
-  categoria: f.categoria as CategoriaProducto,
-  porEncargo: !!f.por_encargo,
-  cantidad: num(f.cantidad),
-  apartado: num(f.apartado) ?? 0,
-  actualizado: ms(f.actualizado),
+  tipo: (TIPOS_AVISO_VALIDOS.has(f.tipo) ? f.tipo : 'general') as TipoAviso,
+  texto: f.texto,
+  productoId: f.producto_id ?? undefined,
+  festividad: txt(f.festividad),
+  fecha: ms(f.creado),
+  hasta: f.hasta ? ms(f.hasta) : undefined,
+});
+
+export const resenaDeFila = (f: FilaResena): Resena => ({
+  id: f.id,
+  negocioId: f.negocio_id,
+  autorId: f.autor_id,
+  autor: f.autor_nombre,
+  estrellas: f.estrellas,
+  etiquetas: f.etiquetas ?? [],
+  comentario: f.comentario ?? '',
+  fecha: ms(f.creado),
 });
 
 export const favoritoDeFila = (f: FilaFavorito): Favorito => ({ id: f.id, usuarioId: f.usuario_id, negocioId: f.negocio_id });

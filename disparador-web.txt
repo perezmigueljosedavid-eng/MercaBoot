@@ -1,0 +1,3 @@
+Disparador de la versión web (iPhone y navegador).
+Al subir cambios que incluyan este archivo, GitHub vuelve a armar la página y la publica en la rama gh-pages.
+Publicación n.º 1 · Versión final 4.0

@@ -22,6 +22,9 @@ export default function Carrito() {
   const [nota, setNota] = useState('');
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');
+  // Explicaciones que salen justo debajo de las opciones cuando se toca una que este negocio no ofrece.
+  const [notaEntrega, setNotaEntrega] = useState('');
+  const [notaPago, setNotaPago] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [confirmarVaciar, setConfirmarVaciar] = useState(false);
 
@@ -66,9 +69,18 @@ export default function Carrito() {
   const cerrado = !negocio.abierto;
   const sinPedidos = !negocio.aceptaPedidos;
   const bloqueado = cerrado || sinPedidos || problemas.length > 0;
+  // El botón de apartar SIEMPRE responde: si no se puede, dice por qué (antes se quedaba mudo).
+  const motivoBloqueo = cerrado
+    ? `«${negocio.nombre}» está cerrado por ahora. Tu carrito se queda guardado: podrás apartarlo cuando abra.`
+    : sinPedidos
+      ? `«${negocio.nombre}» no está recibiendo pedidos por ahora. Escríbele por el chat para preguntar cuándo.`
+      : problemas.length > 0
+        ? 'Hay productos marcados en rojo: quítalos o baja la cantidad y vuelve a tocar «Apartar pedido».'
+        : '';
 
   async function apartar() {
-    if (!negocio || bloqueado || enviando) return;
+    if (!negocio || enviando) return;
+    if (bloqueado) return setError(motivoBloqueo);
     if (entrega === 'domicilio' && !direccion.trim()) return setError('Escribe a dónde lo llevamos.');
     setError('');
     setEnviando(true);
@@ -179,9 +191,49 @@ export default function Carrito() {
             ¿Cómo lo quieres?
           </T>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            <Chip label="Paso a recogerlo" tone="green" active={entrega === 'recoger'} onPress={() => setEntrega('recoger')} />
-            {negocio.aDomicilio ? <Chip label="A domicilio" tone="green" active={entrega === 'domicilio'} onPress={() => setEntrega('domicilio')} /> : null}
+            <Chip
+              label="Paso a recogerlo"
+              tone="green"
+              marca
+              h={44}
+              active={entrega === 'recoger'}
+              onPress={() => {
+                setEntrega('recoger');
+                setNotaEntrega('');
+                setError('');
+              }}
+            />
+            <Chip
+              label="A domicilio"
+              tone="green"
+              marca
+              h={44}
+              active={entrega === 'domicilio'}
+              apagado={!negocio.aDomicilio}
+              pista={negocio.aDomicilio ? undefined : 'Este negocio no hace entregas a domicilio por ahora'}
+              onPress={() => {
+                if (!negocio.aDomicilio) {
+                  setNotaEntrega(`«${negocio.nombre}» todavía no hace entregas a domicilio. Puedes pasar a recogerlo, o preguntarle por el chat si puede llevártelo.`);
+                  return;
+                }
+                setEntrega('domicilio');
+                setNotaEntrega('');
+                setError('');
+              }}
+            />
           </View>
+          {notaEntrega ? (
+            <View style={{ gap: 6 }}>
+              <T size={13} lh={1.4} weight={600} color={C.amberText} accessibilityRole="alert">
+                {notaEntrega}
+              </T>
+              <Pressable accessibilityRole="button" onPress={() => router.push(`/chat-negocio/${negocio.id}`)} hitSlop={8}>
+                <T size={13} weight={700} color={C.greenDark}>
+                  Preguntar por el chat
+                </T>
+              </Pressable>
+            </View>
+          ) : null}
           {entrega === 'domicilio' ? (
             <Field
               label="¿A dónde lo llevamos?"
@@ -201,9 +253,9 @@ export default function Carrito() {
               Entrega en: {negocio.zonaEntrega}
             </T>
           ) : null}
-          {!negocio.aDomicilio ? (
+          {!negocio.aDomicilio && !notaEntrega ? (
             <T size={12} color={C.muted}>
-              Este negocio no hace entregas a domicilio: pasas a recogerlo.
+              Este negocio no hace entregas a domicilio por ahora: pasas a recogerlo.
             </T>
           ) : null}
         </Card>
@@ -213,9 +265,40 @@ export default function Carrito() {
             ¿Cómo pagas?
           </T>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            <Chip label={entrega === 'domicilio' ? 'En persona, al recibir' : 'En persona, al recoger'} tone="green" active={pago === 'en_persona'} onPress={() => setPago('en_persona')} />
-            {negocio.aceptaTransferencia ? <Chip label="Transferencia" tone="green" active={pago === 'transferencia'} onPress={() => setPago('transferencia')} /> : null}
+            <Chip
+              label={entrega === 'domicilio' ? 'En persona, al recibir' : 'En persona, al recoger'}
+              tone="green"
+              marca
+              h={44}
+              active={pago === 'en_persona'}
+              onPress={() => {
+                setPago('en_persona');
+                setNotaPago('');
+              }}
+            />
+            <Chip
+              label="Transferencia"
+              tone="green"
+              marca
+              h={44}
+              active={pago === 'transferencia'}
+              apagado={!negocio.aceptaTransferencia}
+              pista={negocio.aceptaTransferencia ? undefined : 'Este negocio no acepta transferencia por ahora'}
+              onPress={() => {
+                if (!negocio.aceptaTransferencia) {
+                  setNotaPago(`«${negocio.nombre}» todavía no acepta pago por transferencia: puedes pagar en persona.`);
+                  return;
+                }
+                setPago('transferencia');
+                setNotaPago('');
+              }}
+            />
           </View>
+          {notaPago ? (
+            <T size={13} lh={1.4} weight={600} color={C.amberText} accessibilityRole="alert">
+              {notaPago}
+            </T>
+          ) : null}
           <T size={12} lh={1.45} color={C.muted}>
             {pago === 'transferencia'
               ? 'Cuando el negocio acepte tu pedido te mostramos sus datos para transferir. Después tocas «Ya pagué» y el negocio lo confirma. Mientras tu pago no se confirme, el tiempo de apartado sigue corriendo.'
@@ -268,7 +351,7 @@ export default function Carrito() {
         <Btn
           label={enviando ? 'Apartando…' : problemas.length > 0 ? 'Revisa los productos marcados' : `Apartar pedido · ${dinero(tot.total)}`}
           variant={bloqueado ? 'outline' : 'primary'}
-          onPress={bloqueado || enviando ? undefined : apartar}
+          onPress={enviando ? undefined : apartar}
         />
       </View>
 

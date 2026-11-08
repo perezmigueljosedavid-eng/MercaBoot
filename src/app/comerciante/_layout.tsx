@@ -7,6 +7,7 @@ const BarraComerciante = makeTabBar([
   { name: 'index', label: 'Inicio', icon: 'home' },
   { name: 'productos', label: 'Productos', icon: 'box' },
   { name: 'pedidos', label: 'Pedidos', icon: 'receipt', insignia: 'pedidos' },
+  { name: 'avisos', label: 'Avisos', icon: 'megaphone' },
   { name: 'chats', label: 'Chats', icon: 'chat', insignia: 'chats' },
   { name: 'perfil', label: 'Perfil', icon: 'user' },
 ]);
@@ -20,6 +21,7 @@ export default function ComercianteLayout() {
       <Tabs.Screen name="index" />
       <Tabs.Screen name="productos" />
       <Tabs.Screen name="pedidos" />
+      <Tabs.Screen name="avisos" />
       <Tabs.Screen name="chats" />
       <Tabs.Screen name="perfil" />
     </Tabs>

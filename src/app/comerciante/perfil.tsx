@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
-import { useStore } from '../../store';
+import { abrirMapas } from '../../lib/geo';
+import { ratingDe, textoRating, useStore } from '../../store';
 import { Confirmar } from '../../ui/Dialogo';
 import { Icon, IconName } from '../../ui/Icon';
 import { Btn, Card, Group, Screen } from '../../ui/kit';
@@ -40,10 +41,12 @@ function Dato({ icono, texto, vacio }: { icono: IconName; texto?: string; vacio:
 }
 
 export default function PerfilComerciante() {
-  const { cuenta, negocio, salir, cambiarModo, soltarNegocio } = useStore();
+  const { s, cuenta, negocio, salir, cambiarModo, soltarNegocio } = useStore();
   const [confirmando, setConfirmando] = useState(false);
   const [error, setError] = useState('');
   if (!cuenta || !negocio) return null;
+  const rating = ratingDe(negocio.id, s.resenas);
+  const tienePunto = negocio.lat != null && negocio.lng != null;
   // Un negocio del directorio vuelve a la lista sin dueño; uno que la persona creó desaparece
   const delDirectorio = !!negocio.delDirectorio;
 
@@ -62,6 +65,7 @@ export default function PerfilComerciante() {
             </T>
             <T size={13} color={C.muted}>
               {negocio.giro}
+              {rating.promedio != null ? ` · ${textoRating(rating.promedio)} (${rating.total})` : ''}
             </T>
           </View>
         </View>
@@ -76,7 +80,15 @@ export default function PerfilComerciante() {
             vacio="Sin entrega a domicilio"
           />
         </View>
-        <Btn label="Editar mi negocio" h={46} r={12} size={14} onPress={() => router.push('/editar-negocio')} />
+        <T size={12} color={tienePunto || negocio.mapsUrl ? C.greenDark : C.muted}>
+          {tienePunto ? 'Tu punto en el mapa está guardado.' : negocio.mapsUrl ? 'Tienes un enlace de Google Maps guardado.' : 'Sin punto en el mapa (los clientes verán tu dirección escrita).'}
+        </T>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Btn label="Editar mi negocio" h={46} r={12} size={14} flex={1} onPress={() => router.push('/editar-negocio')} />
+          {tienePunto || negocio.mapsUrl ? (
+            <Btn label="Ver en el mapa" variant="outline" h={46} r={12} size={14} flex={1} onPress={() => abrirMapas(negocio)} />
+          ) : null}
+        </View>
       </Card>
 
       <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 }}>
@@ -102,7 +114,7 @@ export default function PerfilComerciante() {
           Esta cuenta también puede comprar
         </T>
         <T size={13} lh={1.45} color={C.muted}>
-          Mira la app como cliente: busca productos y negocios de la comunidad. Tu negocio sigue publicado y puedes volver a tu modo comerciante cuando quieras.
+          Mira la app como cliente: busca productos, pide ideas para cocinar, chatea con otras tiendas y deja reseñas. Tu negocio sigue publicado y puedes volver a tu modo comerciante cuando quieras.
         </T>
         <Btn
           label="Ver la app como cliente"
@@ -126,6 +138,7 @@ export default function PerfilComerciante() {
       <Group r={18}>
         <Fila texto="Clientes frecuentes" onPress={() => router.push('/clientes')} />
         <Fila texto="Así ven mi negocio los clientes" onPress={() => router.push(`/negocio/${negocio.id}`)} />
+        <Fila texto="Reseñas de mis clientes" onPress={() => router.push(`/negocio/${negocio.id}`)} />
         <Fila texto="Ayuda" onPress={() => router.push('/ayuda')} />
       </Group>
 
@@ -151,8 +164,8 @@ export default function PerfilComerciante() {
         titulo={delDirectorio ? `¿Dejar de administrar «${negocio.nombre}»?` : '¿Dejar de ser comerciante?'}
         texto={
           delDirectorio
-            ? 'Tu cuenta sigue como cliente y el negocio vuelve a la lista de la comunidad sin dueño: se quitan sus productos. Si lo reclamaste por error, es lo correcto: su verdadero dueño lo reclama con su código. Si solo quieres comprar un rato, usa «Ver la app como cliente».'
-            : 'Tu cuenta sigue como cliente. Se quitarán de Mercaboot tu negocio y sus productos. Si solo quieres comprar un rato, usa «Ver la app como cliente».'
+            ? 'Tu cuenta sigue como cliente y el negocio vuelve a la lista de la comunidad sin dueño: se quitan sus productos y avisos. Si lo reclamaste por error, es lo correcto: su verdadero dueño lo reclama con su código. Si solo quieres comprar un rato, usa «Ver la app como cliente».'
+            : 'Tu cuenta sigue como cliente. Se quitarán de Mercaboot tu negocio con sus productos y avisos. Si solo quieres comprar un rato, usa «Ver la app como cliente».'
         }
         confirmar={delDirectorio ? 'Sí, soltarlo' : 'Sí, dejar mi negocio'}
         peligro

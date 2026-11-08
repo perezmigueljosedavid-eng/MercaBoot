@@ -1,9 +1,11 @@
 import React from 'react';
 import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
-import { useStore, type EstadoRed } from '../../store';
+import type { TipoAviso } from '../../data/tipos';
+import { avisosVigentes, ratingDe, textoRating, useStore, type EstadoRed } from '../../store';
 import { haceCuanto, textoPrecio } from '../../ui/bits';
-import { Card, Group, Screen, SectionTitle, Toggle } from '../../ui/kit';
+import { FiestaProxima } from '../../ui/Fiestas';
+import { Btn, Card, Group, Screen, SectionTitle, Toggle } from '../../ui/kit';
 import { Logo } from '../../ui/Logo';
 import { T } from '../../ui/T';
 import { C } from '../../ui/theme';
@@ -42,6 +44,14 @@ function EstadoEnVivo({ estado }: { estado: EstadoRed }) {
   );
 }
 
+const RAPIDOS: { label: string; tipo: TipoAviso }[] = [
+  { label: 'Ya no hay…', tipo: 'agotado' },
+  { label: 'Ya hay…', tipo: 'hay' },
+  { label: 'Promoción', tipo: 'promo' },
+  { label: 'Regalo', tipo: 'regalo' },
+  { label: 'Cerrado hoy', tipo: 'cerrado' },
+];
+
 export default function HomeComerciante() {
   const { s, negocio, actualizarNegocio, setDisponible, cuenta, numFrecuentes, pedidosPendientes, chatsSinLeer, estadoRed } = useStore();
   if (!negocio || !cuenta) return null;
@@ -50,7 +60,9 @@ export default function HomeComerciante() {
   const disponibles = propios.filter((p) => p.disponible).length;
   const agotados = propios.length - disponibles;
   const vacio = propios.length === 0;
-  const faltaPerfil = !negocio.direccion && negocio.lat === undefined;
+  const faltaPerfil = !negocio.direccion && negocio.lat == null && !negocio.mapsUrl;
+  const rating = ratingDe(negocio.id, s.resenas);
+  const avisosActivos = avisosVigentes(s.avisos.filter((a) => a.negocioId === negocio.id)).length;
 
   return (
     <Screen contentStyle={{ gap: 22, paddingTop: 16, paddingHorizontal: 20, paddingBottom: 24 }}>
@@ -122,6 +134,12 @@ export default function HomeComerciante() {
         <Pressable accessibilityRole="button" accessibilityLabel="Abrir chats" onPress={() => router.navigate('/comerciante/chats')} style={{ flexBasis: '48%', flexGrow: 1 }}>
           <Cifra valor={String(chatsSinLeer)} etiqueta={chatsSinLeer === 1 ? 'Chat sin leer' : 'Chats sin leer'} color={chatsSinLeer ? C.red : C.ink} />
         </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Abrir avisos" onPress={() => router.navigate('/comerciante/avisos')} style={{ flexBasis: '48%', flexGrow: 1 }}>
+          <Cifra valor={String(avisosActivos)} etiqueta={avisosActivos === 1 ? 'Aviso publicado' : 'Avisos publicados'} />
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Ver mis reseñas" onPress={() => router.push(`/negocio/${negocio.id}`)} style={{ flexBasis: '48%', flexGrow: 1 }}>
+          <Cifra valor={rating.promedio != null ? textoRating(rating.promedio) : '—'} etiqueta={rating.total ? `Calificación (${rating.total})` : 'Calificación'} />
+        </Pressable>
       </View>
 
       {/* clientes frecuentes: los elige el comerciante */}
@@ -141,6 +159,34 @@ export default function HomeComerciante() {
           </T>
         </Card>
       </Pressable>
+
+      {/* fiesta que se acerca */}
+      <FiestaProxima giro={negocio.giro} />
+
+      {/* aviso rápido */}
+      <View style={{ gap: 14, padding: 18, borderRadius: 20, backgroundColor: C.green }}>
+        <T size={18} weight={700} color={C.white}>
+          Publicar un aviso rápido
+        </T>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {RAPIDOS.map((x) => (
+            <Pressable
+              key={x.tipo}
+              accessibilityRole="button"
+              onPress={() => router.navigate({ pathname: '/comerciante/avisos', params: { tipo: x.tipo, t: String(Date.now()) } })}
+              style={{ height: 40, paddingHorizontal: 14, borderRadius: 20, backgroundColor: C.white, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <T size={14} weight={600}>
+                {x.label}
+              </T>
+            </Pressable>
+          ))}
+        </View>
+        <Btn label="Escribir aviso" variant="amber" h={46} r={12} size={15} onPress={() => router.navigate('/comerciante/avisos')} />
+        <T size={12} lh={1.4} color={C.white} style={{ opacity: 0.85 }}>
+          Para fiestas como el Día de las Madres, Día de Muertos o Navidad, toca «Escribir aviso» y elige la fiesta: te damos ideas para tu negocio.
+        </T>
+      </View>
 
       {/* productos */}
       <View style={{ gap: 12 }}>

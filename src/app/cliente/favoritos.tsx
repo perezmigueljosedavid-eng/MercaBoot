@@ -1,12 +1,26 @@
 import React from 'react';
 import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
+import { TIPOS_AVISO } from '../../data/contenido';
+import type { Aviso, Negocio } from '../../data/tipos';
+import { etiquetaDistancia } from '../../lib/geo';
 import { useNegociosOrdenados } from '../../lib/usarDatos';
-import { useStore } from '../../store';
+import { avisosVigentes, textoRating, useStore } from '../../store';
 import { Card, OpenDot, Screen, Tag } from '../../ui/kit';
 import { Logo } from '../../ui/Logo';
 import { T } from '../../ui/T';
 import { C } from '../../ui/theme';
+
+/** Nota de color bajo cada negocio: su último aviso, o la nota de «cerrado». */
+function nota(n: Negocio, avisos: Aviso[]) {
+  const a = avisos.find((x) => x.negocioId === n.id && x.tipo !== 'cerrado');
+  if (a) {
+    const t = TIPOS_AVISO[a.tipo];
+    return { bg: t.tint, fg: t.deep, etiqueta: `${t.badge}:`, texto: a.texto };
+  }
+  if (n.duenoId && !n.abierto) return { bg: C.grey, fg: C.greyText, etiqueta: '', texto: 'Cerrado por hoy' };
+  return null;
+}
 
 /**
  * «Mis favoritos»: los negocios que el cliente guardó (es algo privado, solo suyo).
@@ -16,6 +30,7 @@ export default function Favoritos() {
   const { favoritos, s, cuenta } = useStore();
   const todos = useNegociosOrdenados();
   const lista = todos.filter((d) => favoritos.includes(d.n.id));
+  const vigentes = avisosVigentes(s.avisos);
   const tratos = cuenta ? s.frecuentes.filter((f) => f.clienteId === cuenta.id) : [];
   const conTrato = tratos.map((f) => ({ f, d: todos.find((d) => d.n.id === f.negocioId) })).filter((x) => !!x.d);
 
@@ -65,7 +80,15 @@ export default function Favoritos() {
         lista.map((d) => {
           const n = d.n;
           const trato = tratos.find((f) => f.negocioId === n.id);
-          const sub = [n.giro, n.duenoId ? `${d.disponibles} ${d.disponibles === 1 ? 'disponible' : 'disponibles'}` : null].filter(Boolean).join(' · ');
+          const nt = nota(n, vigentes);
+          const sub = [
+            n.giro,
+            d.rating != null ? textoRating(d.rating) : null,
+            n.duenoId ? `${d.disponibles} ${d.disponibles === 1 ? 'disponible' : 'disponibles'}` : null,
+            etiquetaDistancia(d.dist),
+          ]
+            .filter(Boolean)
+            .join(' · ');
           return (
             <Pressable key={n.id} accessibilityRole="button" onPress={() => router.push(`/negocio/${n.id}`)}>
               <Card style={{ gap: 10, padding: 14 }}>
@@ -88,6 +111,18 @@ export default function Favoritos() {
                   </View>
                   {n.duenoId ? <OpenDot abierto={n.abierto} /> : null}
                 </View>
+                {nt ? (
+                  <View style={{ paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, backgroundColor: nt.bg }}>
+                    <T size={13} color={nt.fg}>
+                      {nt.etiqueta ? (
+                        <T size={13} weight={700} color={nt.fg}>
+                          {nt.etiqueta}{' '}
+                        </T>
+                      ) : null}
+                      {nt.texto}
+                    </T>
+                  </View>
+                ) : null}
               </Card>
             </Pressable>
           );

@@ -1,16 +1,27 @@
 import React from 'react';
 import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
+import type { Insignia } from '../ia/comparar';
 import { abrirMapas, etiquetaDistancia } from '../lib/geo';
 import type { NegocioConDatos } from '../lib/usarDatos';
 import { useStore } from '../store';
 import { Logo } from './Logo';
 import { Btn, Card, OpenDot, Tag } from './kit';
+import { Insignias, textoEstrellas } from './Reputacion';
 import { T } from './T';
 import { C } from './theme';
 
 /** Tarjeta de un negocio con su distancia, sus existencias y los botones para verlo, chatear o llegar. */
-export function NegocioCard({ d, favorito = false }: { d: NegocioConDatos; favorito?: boolean }) {
+export function NegocioCard({
+  d,
+  favorito = false,
+  insignias,
+}: {
+  d: NegocioConDatos;
+  favorito?: boolean;
+  /** En qué destaca frente a las demás tiendas de la lista (más cercana, mejor calificada…). */
+  insignias?: Insignia[];
+}) {
   const { n } = d;
   const { s, cuenta } = useStore();
   // «Cliente frecuente» lo decide el comerciante; «favorito» lo marca el propio cliente.
@@ -39,6 +50,9 @@ export function NegocioCard({ d, favorito = false }: { d: NegocioConDatos; favor
             {subtitulo}
           </T>
           <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <T size={13} weight={d.rating != null ? 700 : 500} color={d.rating != null ? C.ink : C.muted}>
+              {textoEstrellas(d.rating, d.resenas)}
+            </T>
             {reclamado ? (
               <Tag bg={d.disponibles ? C.greenTint : C.grey} fg={d.disponibles ? C.greenDark : C.greyText}>
                 {d.disponibles ? `${d.disponibles} ${d.disponibles === 1 ? 'disponible' : 'disponibles'}` : 'Sin productos publicados'}
@@ -53,6 +67,7 @@ export function NegocioCard({ d, favorito = false }: { d: NegocioConDatos; favor
                 A domicilio
               </Tag>
             ) : null}
+            <Insignias lista={insignias} />
             {trato ? (
               <Tag bg={C.amberTint} fg={C.amberText}>
                 ⭐ Cliente frecuente{trato.descuentoPct > 0 ? ` ${trato.descuentoPct}%` : ''}

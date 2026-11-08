@@ -1,4 +1,4 @@
-/** Tipos de datos de Mercaboot (segundo avance: cuentas, negocios, productos, ubicación y chat). */
+/** Tipos de datos de Mercaboot (versión final: cuentas, negocios, productos, ubicación, chat, pedidos, reseñas y avisos). */
 
 /** Un punto del mapa. */
 export interface Coord {
@@ -7,6 +7,21 @@ export interface Coord {
 }
 
 export type Rol = 'cliente' | 'comerciante';
+
+/** Sabor con el que el asistente entiende un producto (dulce, salado…). */
+export type Sabor = 'dulce' | 'salado' | 'picante' | 'acido' | 'amargo';
+
+/** Momento del día o tipo de platillo para el que sirve algo. */
+export type Momento = 'desayuno' | 'comida' | 'cena' | 'botana' | 'postre' | 'bebida';
+
+/**
+ * Todo lo que el asistente puede leer de un producto: sabor, momento, qué lleva y cómo se sirve.
+ * 'carne' = lleva carne, pollo o pescado · 'sinCarne' = no lleva · 'proteina' = buena fuente (carne, huevo, queso, frijol…)
+ */
+export type Etiqueta = Sabor | Momento | 'carne' | 'proteina' | 'sinCarne' | 'caliente';
+
+/** 'ingrediente' = para cocinar en casa · 'preparado' = platillo, postre o bebida que ya se come o se bebe. */
+export type TipoProducto = 'ingrediente' | 'preparado';
 
 export type CategoriaProducto =
   | 'carne'
@@ -80,6 +95,12 @@ export interface Producto {
   unidad: string;
   disponible: boolean;
   categoria: CategoriaProducto;
+  /** Para cocinar o ya preparado. Si falta, la app lo deduce del nombre y del giro del negocio. */
+  tipo?: TipoProducto;
+  /** Características generales que lee el asistente. Si faltan, la app las deduce del nombre. */
+  etiquetas?: Etiqueta[];
+  /** Ingrediente que reconoció el asistente a partir del nombre. */
+  ingrediente?: string;
   /** Se prepara cuando alguien lo pide (pasteles, platillos…). */
   porEncargo?: boolean;
   /** Existencias (opcional): si el comerciante no las lleva, vale `undefined` y no hay límite. */
@@ -87,6 +108,36 @@ export interface Producto {
   /** Cuánto está apartado ahora en pedidos activos (lo calcula la base de datos). */
   apartado: number;
   actualizado: number;
+}
+
+/* ───────── avisos y reseñas ───────── */
+
+export type TipoAviso = 'agotado' | 'hay' | 'promo' | 'regalo' | 'cerrado' | 'general';
+
+/** Lo que publica el comerciante: se acabó algo, ya hay, promoción, regalo, cerrado hoy… */
+export interface Aviso {
+  id: string;
+  negocioId: string;
+  tipo: TipoAviso;
+  texto: string;
+  productoId?: string;
+  /** Festividad a la que se refiere (ver data/festividades.ts). */
+  festividad?: string;
+  fecha: number;
+  /** Después de este momento (ms) el aviso deja de mostrarse. */
+  hasta?: number;
+}
+
+/** Reseña con estrellas: una por persona y por negocio. */
+export interface Resena {
+  id: string;
+  negocioId: string;
+  autorId: string;
+  autor: string;
+  estrellas: number;
+  etiquetas: string[];
+  comentario: string;
+  fecha: number;
 }
 
 /** Conversación entre un cliente y un negocio (una por pareja). */

@@ -90,7 +90,7 @@ export function makeTabBar(items: TabItem[]) {
                   </View>
                 ) : null}
               </View>
-              <T size={11} weight={activo ? 700 : 600} color={color}>
+              <T size={items.length > 5 ? 10 : 11} weight={activo ? 700 : 600} color={color} numberOfLines={1}>
                 {item.label}
               </T>
             </Pressable>

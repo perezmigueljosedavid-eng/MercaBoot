@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, View } from 'react-native';
 import { useUbicacion } from '../lib/ubicacion';
+import { useStore } from '../store';
 import { Icon } from './Icon';
 import { Btn } from './kit';
 import { T } from './T';
@@ -9,6 +10,7 @@ import { C } from './theme';
 /** Invita a activar la ubicación para ordenar todo por cercanía. Se hace chica cuando ya está activa. */
 export function UbicacionBanner() {
   const { estado, pedir } = useUbicacion();
+  const { avisar } = useStore();
 
   if (estado === 'lista') {
     return (
@@ -17,7 +19,15 @@ export function UbicacionBanner() {
         <T size={13} weight={600} color={C.greenDark} style={{ flex: 1 }}>
           Ubicación activada: lo más cercano aparece primero
         </T>
-        <Pressable accessibilityRole="button" hitSlop={8} onPress={() => pedir()}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Actualizar mi ubicación"
+          hitSlop={8}
+          onPress={async () => {
+            const ok = await pedir();
+            avisar(ok ? 'Listo: tu ubicación está actualizada.' : 'No pudimos encontrar tu ubicación. Revisa que el permiso de ubicación esté activado.');
+          }}
+        >
           <T size={13} weight={700} color={C.green}>
             Actualizar
           </T>

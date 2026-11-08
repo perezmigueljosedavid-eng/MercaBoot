@@ -1,10 +1,10 @@
 name: Construir APK
 
 # Arma el APK de Android en los servidores de GitHub (no hace falta Android Studio).
-# Se ejecuta solo al subir cambios que incluyan el archivo «disparador-apk.txt», o a mano:
-# pestaña Actions → Construir APK → Run workflow.
-# Resultado: Releases → «Mercaboot · Avance 2.1 (carrito y pedidos)». También queda como «artifact» de la corrida.
-# (El Release del Avance 2.0, «avance2-apk», se deja intacto.)
+# Se ejecuta solo al subir cambios que incluyan el archivo «disparador-apk.txt» (para volver a armarlo, edita ese archivo
+# en GitHub y haz Commit). El botón «Run workflow» solo aparece si este archivo está en la rama principal.
+# Resultado: Releases → «Mercaboot · Versión final 4.0». También queda como «artifact» de la corrida.
+# (Los Releases anteriores, «avance2-apk» y «avance2-1-apk», se dejan intactos.)
 #
 # Antes de compilar se revisa src/config.ts (scripts/revisar-config.cjs):
 #   · con los datos de ejemplo (REEMPLAZA-ESTO) el APK sale de PRUEBA, sin base de datos, y NO se publica en Releases;
@@ -82,24 +82,24 @@ jobs:
 
       - name: Renombrar el APK
         id: apk
-        run: cp android/app/build/outputs/apk/release/app-release.apk Mercaboot-avance2-1.apk
+        run: cp android/app/build/outputs/apk/release/app-release.apk Mercaboot-final.apk
 
       - name: Revisar el APK (firma, paquete y permisos)
         continue-on-error: true
         run: |
           BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
           {
-            ls -l Mercaboot-avance2-1.apk
+            ls -l Mercaboot-final.apk
             echo "== apksigner =="
-            "$BT/apksigner" verify --verbose --print-certs Mercaboot-avance2-1.apk | head -12
+            "$BT/apksigner" verify --verbose --print-certs Mercaboot-final.apk | head -12
             echo "== aapt2 =="
-            "$BT/aapt2" dump badging Mercaboot-avance2-1.apk | grep -E "^package|sdkVersion|targetSdkVersion|uses-permission|application-label:|native-code" || true
+            "$BT/aapt2" dump badging Mercaboot-final.apk | grep -E "^package|sdkVersion|targetSdkVersion|uses-permission|application-label:|native-code" || true
           } 2>&1 | tee info-apk.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.nube.outputs.lista == 'true' && 'Mercaboot-avance2-1-apk' || 'Mercaboot-avance2-1-PRUEBA-sin-base-de-datos-apk' }}
-          path: Mercaboot-avance2-1.apk
+          name: ${{ steps.nube.outputs.lista == 'true' && 'Mercaboot-final-apk' || 'Mercaboot-final-PRUEBA-sin-base-de-datos-apk' }}
+          path: Mercaboot-final.apk
 
       - name: Publicar el APK en Releases
         id: release
@@ -107,11 +107,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete avance2-1-apk --cleanup-tag --yes || true
-          gh release create avance2-1-apk Mercaboot-avance2-1.apk \
+          gh release delete final-apk --cleanup-tag --yes || true
+          gh release create final-apk Mercaboot-final.apk \
             --target "${{ github.sha }}" \
-            --title "Mercaboot · Avance 2.1 (carrito y pedidos)" \
-            --notes "APK de prueba del Avance 2.1: carrito de compras y pedidos apartados con tiempo límite (si el cliente no llega, el pedido se libera solo y el producto vuelve a estar a la venta), pago en persona o por transferencia, chat ligado a cada pedido y clientes frecuentes que elige el comerciante (descuento, regalo o cupón). Sigue con la base de datos en la nube en tiempo real, ubicación y chat. Descárgalo desde un celular Android y ábrelo para instalar; necesita internet. Si ya tenías el Avance 2, instálalo encima; si Android no lo permite, desinstala el anterior primero (tus datos están en la nube, no en el teléfono). Si Android avisa que bloquea la instalación, permite instalar apps desde esta fuente (Configuración → Instalar apps desconocidas). Si aparece Play Protect, toca Instalar de todos modos. Corrida #${{ github.run_number }}, commit ${{ github.sha }}."
+            --title "Mercaboot · Versión final 4.0 (Android)" \
+            --notes "APK de la VERSIÓN FINAL de Mercaboot (v4.0): todo lo de los avances en una sola app. Base de datos en la nube con tiempo real, ubicación, chat, carrito y pedidos apartados (paso a recogerlo o a domicilio, pago en persona o por transferencia), clientes frecuentes que elige el comerciante, reseñas con estrellas, avisos y promociones del comerciante, «lo más barato hoy», asistente «Ideas para cocinar» y fiestas. Descárgalo desde un celular Android y ábrelo para instalar; necesita internet. Si ya tenías un avance instalado, instálalo encima; si Android no lo permite, desinstala el anterior primero (tus datos están en la nube, no en el teléfono). Si Android avisa que bloquea la instalación, permite instalar apps desde esta fuente (Configuración → Instalar apps desconocidas). Si aparece Play Protect, toca Instalar de todos modos. Para iPhone usa la versión web instalable (ver LEEME). Corrida #${{ github.run_number }}, commit ${{ github.sha }}."
 
       - name: Guardar cómo terminó la corrida (rama «build-log»)
         if: always()
@@ -131,7 +131,7 @@ jobs:
           d="$(mktemp -d)"
           {
             echo "resultado: $RESULTADO"
-            echo "avance: 2.1"
+            echo "avance: final-4.0"
             echo "corrida: ${{ github.run_number }}"
             echo "commit: ${{ github.sha }}"
             echo "rama: ${{ github.ref_name }}"

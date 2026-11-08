@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
-import { nombreCategoria } from '../../data/contenido';
+import { nombreCategoria, textoEtiquetas } from '../../data/contenido';
+import { perfilDeProducto } from '../../ia/ingredientes';
 import { cantidadTexto } from '../../lib/pedidos';
 import { norm } from '../../lib/texto';
 import { useStore } from '../../store';
@@ -80,7 +81,7 @@ export default function MisProductos() {
             Aún no has publicado productos
           </T>
           <T size={14} lh={1.45} color={C.muted}>
-            No hay lista fija: escribe el nombre de cada cosa que vendes (por ejemplo «Quesillo», «Fresas con crema», «Pastel de tres leches» o «Comida corrida»), pon el precio y cómo se vende (kilo, vaso, rebanada, porción…) y marca si hay o ya se acabó. Los clientes lo verán al momento.
+            No hay lista fija: escribe el nombre de cada cosa que vendes (por ejemplo «Quesillo», «Fresas con crema», «Pastel de tres leches» o «Comida corrida»), pon el precio y cómo se vende (kilo, vaso, rebanada, porción…) y marca si hay o ya se acabó. Los clientes y el asistente lo verán al momento.
           </T>
         </Card>
       ) : lista.length === 0 ? (
@@ -111,7 +112,7 @@ export default function MisProductos() {
                   </T>
                 ) : null}
                 <T size={12} color={C.muted} numberOfLines={1}>
-                  {nombreCategoria(p.categoria)} · {haceCuanto(p.actualizado)}
+                  {[nombreCategoria(p.categoria), textoEtiquetas(perfilDeProducto(p, negocio.giro).etiquetas, 3)].filter(Boolean).join(' · ')} · {haceCuanto(p.actualizado)}
                 </T>
               </Pressable>
               <Pressable

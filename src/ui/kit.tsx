@@ -127,6 +127,12 @@ export function Btn({
   );
 }
 
+/**
+ * Opción para elegir (filtros, entrega, pago…). Siempre responde al toque:
+ *  · se hunde un poco al tocarla, para que se note que sí registró el toque;
+ *  · `apagado` = la opción existe pero no está disponible ahora (se ve atenuada); el toque sigue llegando a `onPress`
+ *    para que la pantalla explique POR QUÉ no se puede, en lugar de quedarse callada.
+ */
 export function Chip({
   label,
   active,
@@ -136,6 +142,9 @@ export function Chip({
   size = 14,
   tone = 'ink',
   border = C.line,
+  apagado = false,
+  pista,
+  marca = false,
 }: {
   label: string;
   active?: boolean;
@@ -145,26 +154,35 @@ export function Chip({
   size?: number;
   tone?: 'ink' | 'green';
   border?: string;
+  apagado?: boolean;
+  /** Texto para lectores de pantalla (por ejemplo, por qué está apagada). */
+  pista?: string;
+  /** Muestra una palomita «✓» cuando está elegida (para opciones que se eligen una u otra). */
+  marca?: boolean;
 }) {
   const on = tone === 'green' ? C.green : C.ink;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected: !!active }}
+      accessibilityHint={pista}
       onPress={onPress}
-      style={{
+      hitSlop={4}
+      style={({ pressed }) => ({
         height: h,
         paddingHorizontal: px,
         borderRadius: h / 2,
-        backgroundColor: active ? on : C.white,
-        borderWidth: active ? 0 : 1,
+        backgroundColor: active && !apagado ? on : C.white,
+        borderWidth: active && !apagado ? 0 : 1,
+        borderStyle: apagado ? 'dashed' : 'solid',
         borderColor: border,
         alignItems: 'center',
         justifyContent: 'center',
-      }}
+        opacity: pressed ? 0.75 : apagado ? 0.6 : 1,
+      })}
     >
-      <T size={size} weight={600} color={active ? C.white : C.ink}>
-        {label}
+      <T size={size} weight={600} color={active && !apagado ? C.white : apagado ? C.muted : C.ink}>
+        {marca && active && !apagado ? `✓ ${label}` : label}
       </T>
     </Pressable>
   );

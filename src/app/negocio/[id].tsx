@@ -2,12 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { nombreCategoria } from '../../data/contenido';
+import { nombreCategoria, textoEtiquetas } from '../../data/contenido';
+import { perfilDeProducto } from '../../ia/ingredientes';
 import { abrirMapas, abrirTelefono, distanciaA, etiquetaDistancia } from '../../lib/geo';
 import { useUbicacion } from '../../lib/ubicacion';
 import { cantidadTexto, dinero, disponibleParaPedir, minutosEnPalabras, pasoCantidad, sePuedePedir } from '../../lib/pedidos';
-import { OTRO_NEGOCIO, useStore } from '../../store';
-import { haceCuanto, textoPrecio } from '../../ui/bits';
+import { avisosVigentes, OTRO_NEGOCIO, ratingDe, textoRating, useStore } from '../../store';
+import { AvisoFila, haceCuanto, textoPrecio } from '../../ui/bits';
 import { Confirmar } from '../../ui/Dialogo';
 import { Icon, IconName } from '../../ui/Icon';
 import { Badge, BackBtn, Btn, Card, Group, OpenDot, Screen, Tag } from '../../ui/kit';
@@ -15,6 +16,8 @@ import { Logo } from '../../ui/Logo';
 import { Stepper } from '../../ui/pedidos';
 import { T } from '../../ui/T';
 import { C } from '../../ui/theme';
+
+type Pestana = 'productos' | 'avisos' | 'resenas';
 
 function Dato({ icono, texto }: { icono: IconName; texto: string }) {
   return (
@@ -36,6 +39,7 @@ export default function Negocio() {
   const { coords } = useUbicacion();
   const [cambio, setCambio] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState('');
+  const [pestana, setPestana] = useState<Pestana>('productos');
 
   // El aviso se quita solo.
   useEffect(() => {
@@ -46,6 +50,8 @@ export default function Negocio() {
 
   const n = s.negocios.find((x) => x.id === id);
   const productos = useMemo(() => s.productos.filter((p) => p.negocioId === id), [s.productos, id]);
+  const avisos = useMemo(() => avisosVigentes(s.avisos.filter((a) => a.negocioId === id)), [s.avisos, id]);
+  const resenas = useMemo(() => s.resenas.filter((x) => x.negocioId === id), [s.resenas, id]);
 
   if (!n) {
     return (
@@ -63,6 +69,8 @@ export default function Negocio() {
   // Marcar favorito es cosa de cliente, y nadie lo hace con su propio negocio.
   const esCliente = cuenta?.rol === 'cliente' && !esMio;
   const favorito = favoritos.includes(n.id);
+  const rating = ratingDe(n.id, s.resenas);
+  const miResena = cuenta ? resenas.find((x) => x.autorId === cuenta.id) : undefined;
   const miTrato = cuenta ? s.frecuentes.find((f) => f.negocioId === n.id && f.clienteId === cuenta.id) : undefined;
   // Se puede apartar si es un negocio con dueño que recibe pedidos y quien mira es un cliente (no el dueño).
   const recibePedidos = reclamado && n.aceptaPedidos;
@@ -94,7 +102,7 @@ export default function Negocio() {
             {p.porEncargo ? ' · por encargo' : ''}
           </T>
           <T size={12} color={C.muted}>
-            {nombreCategoria(p.categoria)}
+            {[nombreCategoria(p.categoria), textoEtiquetas(perfilDeProducto(p, n.giro).etiquetas, 3)].filter(Boolean).join(' · ')}
             {p.disponible && libre != null && libre > 0 ? ` · Quedan ${cantidadTexto(libre)}` : ''}
             {todoApartado ? ' · Todo apartado por ahora' : ''}
           </T>
@@ -163,6 +171,11 @@ export default function Negocio() {
             <T size={14} color={C.muted}>
               {n.giro}
             </T>
+            {rating.promedio != null ? (
+              <T size={14} weight={700}>
+                {textoRating(rating.promedio)} <T size={14} color={C.muted}>({rating.total})</T>
+              </T>
+            ) : null}
             {n.aDomicilio ? (
               <Tag bg={C.greenTint} fg={C.greenDark}>
                 A domicilio
@@ -245,7 +258,7 @@ export default function Negocio() {
               Así ven tu negocio los clientes
             </T>
             <T size={13} lh={1.45} color={C.greenDark}>
-              Para cambiar tus productos o tus datos, pasa a tu modo comerciante.
+              Para cambiar tus productos, avisos o datos, pasa a tu modo comerciante.
             </T>
             <Btn
               label="Ir a mi negocio"
@@ -284,32 +297,120 @@ export default function Negocio() {
           </Card>
         ) : null}
 
-        <T size={18} weight={800} ls={-0.01}>
-          Productos
-        </T>
-
-        {productos.length === 0 ? (
-          <T size={14} lh={1.45} color={C.muted}>
-            {reclamado ? 'Este negocio todavía no ha publicado sus productos.' : 'Cuando el dueño se una a Mercaboot, aquí verás qué tiene disponible cada día.'}
-          </T>
-        ) : (
-          <View style={{ gap: 12 }}>
-            {ultima ? (
-              <T size={12} color={C.muted}>
-                Productos actualizados {haceCuanto(ultima)}
-              </T>
-            ) : null}
-            {disponibles.length ? <Group>{disponibles.map(fila)}</Group> : null}
-            {agotados.length ? (
-              <>
-                <T size={13} weight={700} color={C.muted}>
-                  Agotados por ahora
+        {/* pestañas */}
+        <View accessibilityRole="tablist" style={{ flexDirection: 'row', gap: 24, borderBottomWidth: 1, borderBottomColor: C.line }}>
+          {(
+            [
+              ['productos', 'Productos'],
+              ['avisos', `Avisos${avisos.length ? ` (${avisos.length})` : ''}`],
+              ['resenas', `Reseñas${rating.total ? ` (${rating.total})` : ''}`],
+            ] as [Pestana, string][]
+          ).map(([k, label]) => {
+            const on = pestana === k;
+            return (
+              <Pressable
+                key={k}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: on }}
+                onPress={() => setPestana(k)}
+                style={{ paddingVertical: 10, borderBottomWidth: 2.5, borderBottomColor: on ? C.green : 'transparent' }}
+              >
+                <T size={14} weight={on ? 700 : 600} color={on ? C.ink : C.muted}>
+                  {label}
                 </T>
-                <Group>{agotados.map(fila)}</Group>
-              </>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {pestana === 'productos' ? (
+  productos.length === 0 ? (
+            <T size={14} lh={1.45} color={C.muted}>
+              {reclamado ? 'Este negocio todavía no ha publicado sus productos.' : 'Cuando el dueño se una a Mercaboot, aquí verás qué tiene disponible cada día.'}
+            </T>
+          ) : (
+            <View style={{ gap: 12 }}>
+              {ultima ? (
+                <T size={12} color={C.muted}>
+                  Productos actualizados {haceCuanto(ultima)}
+                </T>
+              ) : null}
+              {disponibles.length ? <Group>{disponibles.map(fila)}</Group> : null}
+              {agotados.length ? (
+                <>
+                  <T size={13} weight={700} color={C.muted}>
+                    Agotados por ahora
+                  </T>
+                  <Group>{agotados.map(fila)}</Group>
+                </>
+              ) : null}
+            </View>
+          )
+        ) : null}
+
+        {pestana === 'avisos' ? (
+          avisos.length ? (
+            <Group>
+              {avisos.map((a) => (
+                <AvisoFila key={a.id} a={a} mostrarNegocio={false} />
+              ))}
+            </Group>
+          ) : (
+            <T size={14} color={C.muted}>
+              Este negocio no tiene avisos por ahora.
+            </T>
+          )
+        ) : null}
+
+        {pestana === 'resenas' ? (
+          <View style={{ gap: 12 }}>
+            {esCliente && reclamado ? (
+              <Btn
+                label={miResena ? 'Editar mi reseña' : 'Dejar reseña'}
+                h={46}
+                r={12}
+                size={14}
+                onPress={() => router.push(`/resena/${n.id}`)}
+              />
             ) : null}
+            {resenas.length === 0 ? (
+              <T size={14} color={C.muted}>
+                Aún no hay reseñas.{esCliente && reclamado ? ' Sé la primera persona en opinar.' : ''}
+              </T>
+            ) : (
+              resenas.map((x) => (
+                <Card key={x.id} style={{ gap: 8, padding: 14 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <T size={14} weight={700}>
+                      {x.autor}
+                      {cuenta && x.autorId === cuenta.id ? ' (tú)' : ''}
+                    </T>
+                    <T size={14} weight={700} color={C.amber}>
+                      {'★'.repeat(x.estrellas)}
+                      <T size={14} weight={700} color={C.off}>
+                        {'★'.repeat(5 - x.estrellas)}
+                      </T>
+                    </T>
+                  </View>
+                  {x.etiquetas.length ? (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                      {x.etiquetas.map((e) => (
+                        <Tag key={e} bg={C.greenTint} fg={C.greenDark}>
+                          {e}
+                        </Tag>
+                      ))}
+                    </View>
+                  ) : null}
+                  {x.comentario ? (
+                    <T size={14} lh={1.45}>
+                      {x.comentario}
+                    </T>
+                  ) : null}
+                </Card>
+              ))
+            )}
           </View>
-        )}
+        ) : null}
       </View>
     </Screen>
 

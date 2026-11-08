@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
+import { useUbicacion } from '../../lib/ubicacion';
 import { useStore } from '../../store';
 import { Btn, Card, Group, Screen } from '../../ui/kit';
 import { Logo } from '../../ui/Logo';
@@ -32,8 +33,17 @@ function Fila({ texto, detalle, onPress }: { texto: string; detalle?: string; on
 }
 
 export default function PerfilCliente() {
-  const { cuenta, favoritos, salir, negocio, cambiarModo } = useStore();
+  const { cuenta, favoritos, s, salir, negocio, cambiarModo, avisar } = useStore();
+  const { estado, pedir } = useUbicacion();
   const [error, setError] = useState('');
+  const resenas = s.resenas.filter((r) => r.autorId === cuenta?.id).length;
+  // Siempre responde: dice si se pudo actualizar la ubicación o qué hacer si no.
+  const actualizarUbicacion = async () => {
+    const ok = await pedir();
+    avisar(ok ? 'Listo: tu ubicación está actualizada.' : 'No pudimos encontrar tu ubicación. Revisa que el permiso de ubicación esté activado.');
+  };
+  const textoUbicacion =
+    estado === 'lista' ? 'Activada' : estado === 'buscando' ? 'Buscando…' : estado === 'denegada' ? 'Sin permiso' : 'Activar';
 
   return (
     <Screen contentStyle={{ gap: 20, paddingTop: 16, paddingHorizontal: 20, paddingBottom: 16 }}>
@@ -88,7 +98,7 @@ export default function PerfilCliente() {
             ¿También vendes algo?
           </T>
           <T size={13} lh={1.45} color={C.amberDeep}>
-            Abre tu negocio con esta misma cuenta: sigues comprando como cliente y, además, publicas tus productos. No necesitas otra cuenta.
+            Abre tu negocio con esta misma cuenta: sigues comprando como cliente y, además, publicas tus productos y avisos. No necesitas otra cuenta.
           </T>
           <Btn label="Abrir mi negocio" variant="amber" h={46} r={12} size={14} onPress={() => router.push('/abrir-negocio')} />
         </Card>
@@ -96,6 +106,8 @@ export default function PerfilCliente() {
 
       <Group r={18}>
         <Fila texto="Mis favoritos" detalle={String(favoritos.length)} onPress={() => router.navigate('/cliente/favoritos')} />
+        <Fila texto="Mis reseñas" detalle={String(resenas)} onPress={() => router.push('/mis-resenas')} />
+        <Fila texto="Mi ubicación" detalle={textoUbicacion} onPress={actualizarUbicacion} />
         <Fila texto="Ayuda" onPress={() => router.push('/ayuda')} />
       </Group>
       <Btn

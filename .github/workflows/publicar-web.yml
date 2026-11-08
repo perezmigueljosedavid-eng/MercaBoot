@@ -1,0 +1,79 @@
+name: Publicar versión web (iPhone y navegador)
+
+# Arma la versión WEB de Mercaboot (la que se instala en el iPhone con «Añadir a pantalla de inicio»,
+# y también funciona en Android y en computadora) y la sube a la rama «gh-pages».
+# GitHub Pages la muestra en:  https://<usuario>.github.io/<repositorio>/   (ej. https://perezmigueljosedavid-eng.github.io/MercaBoot/)
+#
+# Se ejecuta solo al subir cambios que incluyan «disparador-web.txt» (para volver a armarla, edita ese archivo en GitHub y haz Commit).
+# El botón «Run workflow» solo aparece si este archivo está en la rama principal.
+# UNA SOLA VEZ hay que prender Pages:  Settings → Pages → Source: «Deploy from a branch» → Branch: gh-pages, carpeta «/ (root)» → Save.
+#
+# Igual que con el APK, antes se revisa src/config.ts (nunca debe llevar una llave secreta).
+on:
+  workflow_dispatch:
+  push:
+    paths: [disparador-web.txt]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publicar-web
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: '1'
+      EXPO_NO_TELEMETRY: '1'
+      # Ruta donde GitHub Pages publica este repositorio: /<nombre-del-repositorio>
+      EXPO_WEB_BASE_URL: /${{ github.event.repository.name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Revisar la conexión con la base de datos (src/config.ts)
+        id: nube
+        run: node scripts/revisar-config.cjs 2>&1 | tee -a build.log
+
+      - name: Instalar dependencias
+        run: npm install --no-audit --no-fund 2>&1 | tee -a build.log
+
+      - name: Crear los íconos (carpeta assets)
+        run: |
+          mkdir -p "$RUNNER_TEMP/iconos"
+          (cd "$RUNNER_TEMP/iconos" && npm init -y >/dev/null && npm i sharp --no-audit --no-fund 2>&1 | tail -3)
+          NODE_PATH="$RUNNER_TEMP/iconos/node_modules" node scripts/hacer-iconos.cjs 2>&1 | tee -a build.log
+
+      - name: Armar la versión web
+        run: npx expo export --platform web --output-dir dist 2>&1 | tee -a build.log
+
+      - name: Dejarla lista para instalar en el celular (404.html, manifiesto, .nojekyll)
+        run: node scripts/preparar-web.cjs dist 2>&1 | tee -a build.log
+
+      - name: Subir a la rama gh-pages
+        if: steps.nube.outputs.lista == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd dist
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Versión web · corrida #${{ github.run_number }} · commit ${{ github.sha }}"
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:refs/heads/gh-pages
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mercaboot-web
+          path: dist

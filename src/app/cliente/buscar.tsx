@@ -2,17 +2,39 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { nombreCategoria } from '../../data/contenido';
+import { precioBase } from '../../ia/comparar';
+import {
+  buscarNegocios,
+  buscarProductos,
+  insigniasDeTiendas,
+  ordenarEncontrados,
+  OrdenProductos,
+  tiendasSegun,
+  useNegociosOrdenados,
+} from '../../lib/usarDatos';
 import { etiquetaDistancia } from '../../lib/geo';
 import { useUbicacion } from '../../lib/ubicacion';
-import { buscarNegocios, buscarProductos, useNegociosOrdenados } from '../../lib/usarDatos';
 import { useStore } from '../../store';
 import { textoPrecio } from '../../ui/bits';
 import { Icon } from '../../ui/Icon';
 import { Badge, Chip, Screen, Tag } from '../../ui/kit';
 import { Logo } from '../../ui/Logo';
 import { NegocioCard } from '../../ui/NegocioCard';
+import { textoEstrellas } from '../../ui/Reputacion';
 import { T } from '../../ui/T';
 import { C, FONT } from '../../ui/theme';
+
+const ORDENES: { id: OrdenProductos; label: string }[] = [
+  { id: 'cerca', label: 'Más cerca' },
+  { id: 'precio', label: 'Más barato' },
+  { id: 'estrellas', label: 'Mejor calificadas' },
+];
+
+const NOTA_ORDEN: Record<OrdenProductos, string> = {
+  cerca: 'De la tienda más cercana a la más lejana.',
+  precio: 'Del precio más bajo al más alto, comparando solo la misma medida (kilo con kilo, pieza con pieza).',
+  estrellas: 'Por estrellas de los clientes. Las tiendas sin reseñas también aparecen.',
+};
 
 export default function Buscar() {
   const params = useLocalSearchParams<{ q?: string }>();
@@ -22,6 +44,7 @@ export default function Buscar() {
   const [q, setQ] = useState(params.q ?? '');
   const [disponible, setDisponible] = useState(false);
   const [domicilio, setDomicilio] = useState(false);
+  const [orden, setOrden] = useState<OrdenProductos>('cerca');
 
   // Si llegas desde el buscador del inicio con un texto nuevo, se pone en el campo.
   const [qAnterior, setQAnterior] = useState(params.q);
@@ -33,18 +56,38 @@ export default function Buscar() {
   const consulta = q.trim();
 
   const productos = useMemo(() => {
-    let lista = consulta ? buscarProductos(consulta, s.productos, s.negocios, coords) : [];
+    let lista = buscarProductos(consulta, s.productos, s.negocios, coords, s.resenas);
     if (disponible) lista = lista.filter((r) => r.p.disponible);
     if (domicilio) lista = lista.filter((r) => r.n.aDomicilio);
-    return lista;
-  }, [consulta, s.productos, s.negocios, coords, disponible, domicilio]);
+    return ordenarEncontrados(lista, orden);
+  }, [consulta, s.productos, s.negocios, s.resenas, coords, disponible, domicilio, orden]);
+
+  // El más barato solo se marca cuando hay con qué compararlo: mismo tipo de medida y al menos dos tiendas distintas
+  const masBaratos = useMemo(() => {
+    const res = new Set<string>();
+    const cmp = productos
+      .filter((r) => r.p.disponible)
+      .map((r) => ({ id: r.p.id, negocio: r.n.id, pb: precioBase(r.p.precio, r.p.unidad) }))
+      .filter((x): x is { id: string; negocio: string; pb: NonNullable<typeof x.pb> } => !!x.pb);
+    const porBase = new Map<string, typeof cmp>();
+    for (const x of cmp) porBase.set(x.pb.base, [...(porBase.get(x.pb.base) ?? []), x]);
+    for (const grupo of porBase.values()) {
+      if (new Set(grupo.map((g) => g.negocio)).size < 2) continue;
+      const min = Math.min(...grupo.map((g) => g.pb.valor));
+      const max = Math.max(...grupo.map((g) => g.pb.valor));
+      if (max - min < 0.005) continue;
+      grupo.filter((g) => g.pb.valor - min < 0.005).forEach((g) => res.add(g.id));
+    }
+    return res;
+  }, [productos]);
 
   const tiendas = useMemo(() => {
     let lista = consulta ? buscarNegocios(consulta, negocios) : negocios;
     if (domicilio) lista = lista.filter((d) => d.n.aDomicilio);
     if (disponible) lista = lista.filter((d) => d.disponibles > 0);
-    return lista;
-  }, [consulta, negocios, domicilio, disponible]);
+    return tiendasSegun(lista, orden === 'estrellas' ? 'estrellas' : 'cerca');
+  }, [consulta, negocios, domicilio, disponible, orden]);
+  const insignias = useMemo(() => insigniasDeTiendas(tiendas), [tiendas]);
 
   const hayProductosPublicados = s.productos.length > 0;
 
@@ -83,9 +126,22 @@ export default function Buscar() {
         ) : null}
       </View>
 
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        <Chip label="Disponible ahora" h={38} px={14} size={13} active={disponible} onPress={() => setDisponible((v) => !v)} />
-        <Chip label="A domicilio" h={38} px={14} size={13} active={domicilio} onPress={() => setDomicilio((v) => !v)} />
+      <View style={{ gap: 8 }}>
+        <T size={12} weight={700} color={C.muted}>
+          Ordenar por
+        </T>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {ORDENES.map((o) => (
+            <Chip key={o.id} label={o.label} h={38} px={14} size={13} tone="green" active={orden === o.id} onPress={() => setOrden(o.id)} />
+          ))}
+        </View>
+        <T size={12} lh={1.4} color={C.muted}>
+          {NOTA_ORDEN[orden]}
+        </T>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+          <Chip label="Disponible ahora" h={38} px={14} size={13} active={disponible} onPress={() => setDisponible((v) => !v)} />
+          <Chip label="A domicilio" h={38} px={14} size={13} active={domicilio} onPress={() => setDomicilio((v) => !v)} />
+        </View>
       </View>
 
       {consulta ? (
@@ -97,11 +153,11 @@ export default function Buscar() {
             {productos.length === 0 ? (
               <T size={14} lh={1.45} color={C.muted}>
                 {hayProductosPublicados
-                  ? 'Ninguna tienda tiene publicado eso por ahora. Prueba con otra palabra.'
+                  ? 'Ninguna tienda tiene publicado eso por ahora. Prueba con otra palabra o pregúntale a una tienda por chat.'
                   : 'Las tiendas todavía no han publicado productos. En cuanto lo hagan, los verás aquí.'}
               </T>
             ) : (
-              productos.map(({ p, n, dist }) => (
+              productos.map(({ p, n, dist, rep }) => (
                 <Pressable
                   key={p.id}
                   accessibilityRole="button"
@@ -129,13 +185,21 @@ export default function Buscar() {
                     <T size={13} weight={600}>
                       {textoPrecio(p.precio, p.unidad)} <T size={12} color={C.muted}>· {nombreCategoria(p.categoria)}</T>
                     </T>
-                    {n.aDomicilio ? (
-                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+                      <T size={12} weight={rep.promedio != null ? 700 : 500} color={rep.promedio != null ? C.amberText : C.muted}>
+                        {textoEstrellas(rep.promedio, rep.total)}
+                      </T>
+                      {n.aDomicilio ? (
                         <Tag bg={C.greenTint} fg={C.greenDark}>
                           A domicilio
                         </Tag>
-                      </View>
-                    ) : null}
+                      ) : null}
+                      {masBaratos.has(p.id) ? (
+                        <Tag bg={C.green} fg={C.white}>
+                          Más económico
+                        </Tag>
+                      ) : null}
+                    </View>
                   </View>
                   <Badge bg={p.disponible ? C.greenTint : C.redTint} fg={p.disponible ? C.greenDark : C.red}>
                     {p.disponible ? (p.porEncargo ? 'Por encargo' : 'Hay') : p.porEncargo ? 'Sin pedidos' : 'Agotado'}
@@ -148,7 +212,7 @@ export default function Buscar() {
       ) : null}
 
       <T size={14} color={C.muted}>
-        {consulta ? `Negocios para “${consulta}”` : 'Todos los negocios'}
+        {consulta ? `Negocios para “${consulta}”` : orden === 'estrellas' ? 'Todos los negocios, de mejor a menor calificación' : 'Todos los negocios, del más cercano al más lejano'}
       </T>
       <View style={{ gap: 12 }}>
         {tiendas.length === 0 ? (
@@ -156,7 +220,7 @@ export default function Buscar() {
             No encontramos negocios con esos datos.
           </T>
         ) : (
-          tiendas.map((d) => <NegocioCard key={d.n.id} d={d} favorito={favoritos.includes(d.n.id)} />)
+          tiendas.map((d) => <NegocioCard key={d.n.id} d={d} favorito={favoritos.includes(d.n.id)} insignias={insignias.get(d.n.id)} />)
         )}
       </View>
     </Screen>

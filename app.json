@@ -3,7 +3,7 @@
     "name": "Mercaboot",
     "slug": "mercaboot",
     "scheme": "mercaboot",
-    "version": "2.1.0",
+    "version": "4.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "com.mercaboot.app",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "backgroundColor": "#1F7A4D",
         "foregroundImage": "./assets/adaptive-icon.png"
@@ -24,7 +24,10 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "lang": "es",
+      "themeColor": "#1F7A4D",
+      "description": "Mercaboot: lo que hay hoy en las tiendas de tu comunidad, en tiempo real."
     },
     "plugins": [
       "expo-router",
