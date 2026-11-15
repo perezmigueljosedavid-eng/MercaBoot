@@ -86,6 +86,7 @@ Estos pasos sirven para repetirlo con **otro** proyecto. Se hace una sola vez y 
 1. **New project**: nombre (por ejemplo `mercaboot`), una contraseña de base de datos (guárdala en privado) y la región más cercana.
 2. **SQL Editor → New query** → pega **todo** [`supabase/esquema.sql`](supabase/esquema.sql) → **Run**. Se puede ejecutar más de una vez sin borrar datos. Crea las tablas, las reglas de seguridad (RLS), el tiempo real, los pedidos, las reseñas, los avisos y las 3 tiendas del directorio.
    *Si ya tenías instalado el Avance 2.1*, basta con ejecutar [`supabase/actualizacion-final.sql`](supabase/actualizacion-final.sql) (agrega reseñas, avisos y los datos nuevos de los productos sin borrar nada).
+   *Si ya tenías instalada la versión final*, ejecuta [`supabase/actualizacion-seguridad.sql`](supabase/actualizacion-seguridad.sql) (límites de uso, registro de seguridad y validaciones extra; no borra nada).
    *Opcional*: activa la extensión **pg_cron** (Integrations → Cron) para que los pedidos vencidos y los avisos caducados se limpien cada minuto aunque nadie tenga la app abierta.
 3. **Authentication → Sign In / Providers → Email**: **apaga «Confirm email»** y guarda (si no, cada cuenta nueva tendría que confirmarse desde un correo).
 4. *(Opcional, para «¿Olvidaste tu contraseña?»)* **Authentication → URL Configuration → Redirect URLs** → agrega `mercaboot://**` y la dirección de la app web.
@@ -154,6 +155,35 @@ node scripts/codigo-reclamo.mjs --revisar carniceria-keren K7M2-9QXP-4HWD   # ¿
 
 El script muestra el código (se lo das al dueño y lo guardas en privado, **no** en el proyecto ni en GitHub) y el SQL que se pega en **SQL Editor** para dejar la huella.
 **Coordenadas de las tiendas del directorio**: aún no las tienen. Cuando las tengas: `update public.negocios set lat = 17.0000, lng = -96.7000 where id = 'carniceria-keren';` (con los números reales).
+
+## Seguridad: qué protege a Mercaboot
+
+Toda la protección importante vive **en la base de datos**, no en la app. Así sirve igual aunque alguien no use la app y le hable directo a la API.
+
+| Pregunta | Respuesta |
+| --- | --- |
+| ¿Cada tabla tiene reglas de acceso (RLS)? | Sí, las 16. Sin sesión no se puede leer ni escribir ninguna; con sesión, cada quien ve solo lo suyo (perfil, chats, pedidos, favoritos). |
+| ¿Hay llaves secretas en la app o en GitHub? | No. En `src/config.ts` solo va la llave **pública** (`anon`), que está hecha para ir dentro de la app. `scripts/revisar-config.cjs` detiene el armado del APK si alguien pega una llave secreta. |
+| ¿Hay archivos `.env` subidos? | No, y `.gitignore` los bloquea. El proyecto no necesita ninguno. |
+| ¿Hay límite de peticiones? | Sí, por cuenta: 30 mensajes por minuto, 60 productos nuevos cada 10 minutos, 30 pedidos por hora, etc. (sección K de `supabase/esquema.sql`). Al pasarse, la app dice «Vas muy rápido…». El inicio de sesión y el registro los limita Supabase por dirección IP. |
+| ¿Se valida lo que entra? | Sí, dos veces: en la app (mensajes claros) y en la base (largos máximos, formatos, listas cerradas, enlaces solo `http/https`, fotos solo imágenes). |
+| ¿Los errores muestran datos internos? | No. `textoError` (en `src/lib/nube.ts`) traduce todo a mensajes en español; lo desconocido se muestra como «Algo salió mal». |
+| ¿Hay pantallas de admin o de pruebas? | No. Las funciones internas de la base no se pueden llamar desde la app. |
+| ¿Hay un registro para detectar ataques? | Sí: la tabla `registro_seguridad` (ver abajo), además de los registros propios de Supabase (**Logs** en el panel). |
+
+**Cómo leer el registro de seguridad**: Supabase → **Table Editor** → `registro_seguridad` (lo más nuevo arriba), o en **SQL Editor**:
+
+```sql
+select creado, evento, usuario_id, detalle from public.registro_seguridad order by creado desc limit 100;
+-- ¿Quién está llegando a los límites o fallando códigos de reclamo?
+select evento, usuario_id, count(*) from public.registro_seguridad
+where creado > now() - interval '7 days' and evento in ('limite_alcanzado', 'codigo_reclamo_incorrecto', 'reclamo_bloqueado')
+group by 1, 2 order by 3 desc;
+```
+
+Eventos que anota: `cuenta_creada`, `cuenta_eliminada`, `negocio_creado`, `negocio_reclamado`, `negocio_soltado`, `negocio_eliminado`, `codigo_reclamo_incorrecto`, `reclamo_bloqueado` y `limite_alcanzado`. No guarda contraseñas ni códigos, y se limpia solo a los 180 días. Los inicios de sesión fallidos los guarda Supabase en **Logs → Auth**.
+
+**Reglas para no romper la seguridad**: nunca pegues la llave `service_role` ni `sb_secret_…` en la app, en el repositorio ni en un chat; si creas una tabla nueva, actívale RLS y quítale los permisos a `anon` antes de usarla; y si una llave se publica por error, **desactívala** en el panel de quien la emitió (borrarla del archivo no basta: queda en el historial).
 
 ## Dónde cambiar cosas
 

@@ -12,10 +12,17 @@ export function textoCoord(c: Coord): string {
 /** Enlace para llegar al negocio: con coordenadas si las hay, si no su enlace de Maps o una búsqueda por nombre. */
 type DatosMapa = Pick<Negocio, 'nombre' | 'direccion' | 'lat' | 'lng' | 'mapsUrl'>;
 
+/** De lo que pegó el comerciante, solo la parte que es un enlace web (http o https). Vacío si no hay ninguno. */
+export function soloEnlaceWeb(texto: string | undefined | null): string {
+  return /^https?:\/\/\S+/i.exec((texto ?? '').trim())?.[0] ?? '';
+}
+
 export function enlaceMapas(n: DatosMapa): string {
   const c = coordDe(n);
   if (c) return `https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}`;
-  if (n.mapsUrl) return n.mapsUrl;
+  // Por seguridad solo se abre un enlace web: cualquier otra clase de enlace guardado en el negocio se ignora.
+  const enlace = soloEnlaceWeb(n.mapsUrl);
+  if (enlace) return enlace;
   const q = [n.nombre, n.direccion, COMUNIDAD].filter(Boolean).join(' ');
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 }

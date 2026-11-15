@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
-import { abrirMapas, resolverEnlaceMapas, textoCoord } from '../lib/geo';
+import { abrirMapas, resolverEnlaceMapas, soloEnlaceWeb, textoCoord } from '../lib/geo';
 import { posicionActual } from '../lib/ubicacion';
 import { Icon } from './Icon';
 import { Btn, Field } from './kit';
@@ -53,16 +53,18 @@ export function UbicacionCampo({
     if (!texto) return;
     setMsg(null);
     setOcupado(true);
-    const esEnlace = /^https?:\/\//i.test(texto);
+    // Solo se guarda la parte que es un enlace web (si pegaron texto alrededor, se queda fuera).
+    const enlace = soloEnlaceWeb(texto);
+    const esEnlace = !!enlace;
     const c = await resolverEnlaceMapas(texto);
     setOcupado(false);
     if (c) {
-      onChange({ ...value, lat: c.lat, lng: c.lng, mapsUrl: esEnlace ? texto : value.mapsUrl });
+      onChange({ ...value, lat: c.lat, lng: c.lng, mapsUrl: esEnlace ? enlace : value.mapsUrl });
       setMsg({ ok: true, texto: 'Listo, guardamos el punto del mapa.' });
       setPegado('');
       setMostrarPegar(false);
     } else if (esEnlace) {
-      onChange({ ...value, mapsUrl: texto });
+      onChange({ ...value, mapsUrl: enlace });
       setMsg({
         ok: false,
         texto:

@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { ScrollView, View } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, router, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -62,14 +62,25 @@ function Aviso({ texto }: { texto: string | null }) {
   );
 }
 
+/** Las únicas pantallas que se pueden abrir sin haber iniciado sesión (el primer tramo de su dirección). */
+const PANTALLAS_PUBLICAS = new Set(['', 'tipo-cuenta', 'registro', 'iniciar-sesion', 'recuperar', 'restablecer', 'ayuda', '+not-found']);
+
 function Raiz({ fuentesListas }: { fuentesListas: boolean }) {
-  const { ready, nubeOk, estadoRed, aviso } = useStore();
+  const { ready, nubeOk, estadoRed, aviso, cuenta } = useStore();
   const insets = useSafeAreaInsets();
+  const segmentos: string[] = useSegments();
   const lista = fuentesListas && ready;
 
   useEffect(() => {
     if (lista) SplashScreen.hideAsync().catch(() => {});
   }, [lista]);
+
+  // Candado general: sin sesión, cualquier pantalla interna (aunque escriban su dirección a mano) regresa a la bienvenida.
+  // Los datos ya los protege la base de datos (RLS); esto evita además que alguien vea una pantalla vacía o a medias.
+  const fuera = lista && nubeOk && !cuenta && !PANTALLAS_PUBLICAS.has(segmentos[0] ?? '');
+  useEffect(() => {
+    if (fuera) router.replace('/');
+  }, [fuera]);
 
   if (!lista) return null;
   if (!nubeOk) return <PantallaSinNube />;

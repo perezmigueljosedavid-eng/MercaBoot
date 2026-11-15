@@ -423,6 +423,8 @@ export function textoError(e: unknown): string {
       return 'La contraseña nueva debe ser distinta a la actual.';
     case '23505':
       return 'Eso ya existe.';
+    case '23514':
+      return 'Algún dato no tiene el formato correcto. Revísalo e inténtalo de nuevo.';
     case '42501':
       return 'No tienes permiso para hacer eso.';
     case 'PGRST301':
