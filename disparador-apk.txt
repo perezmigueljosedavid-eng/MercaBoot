@@ -1,3 +1,3 @@
 Disparador de compilación del APK.
 Al subir cambios que incluyan este archivo, GitHub vuelve a compilar el APK.
-Compilación n.º 6 · Versión final 4.0
+Compilación n.º 7 · Versión final 4.0 (revisión de seguridad)
