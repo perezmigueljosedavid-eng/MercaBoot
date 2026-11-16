@@ -39,6 +39,9 @@ Está hecha con Expo / React Native: **el mismo código** funciona en Android, e
 **Boti, el asistente que te guía**
 
 - **Boti** es el personaje propio de Mercaboot: una bolsita del mandado verde con su franja ámbar (diseño propio del equipo). Saluda en la **bienvenida**, cocina en **«¿Qué se te antoja?»**, busca con su **lupa** cuando no hay resultados, anuncia con su **megáfono** en el inicio del comerciante, acompaña el **carrito vacío** con su caja y **se duerme** cuando no hay internet. Vive en `src/ui/Boti.tsx` y cambia de gesto y accesorio según la pantalla.
+- **Boti es la mascota virtual de la app.** Te acompaña flotando arriba de la barra de pestañas (`src/ui/BotiCompania.tsx`): parpadea, mueve los ojos, se pone el gorro, sombrero o megáfono según la pantalla, lanza confeti y corazones al tocarlo, da una pista distinta en cada toque (los consejos están en `src/data/botiConsejos.ts`), se puede **arrastrar** a otro lugar y **se duerme** si nadie lo toca 90 segundos o si no hay internet. Reacciona al guardar un producto, mandar un pedido o agregar al carrito. No aparece en formularios, chats ni en la bienvenida para no estorbar.
+- **Cómo quitar o apagar a Boti:** en **Perfil → «Boti, tu mascota»** hay tres interruptores: *Boti activo* (apagado, no se mueve, no suena ni habla), *Que me acompañe* (quita al compañero flotante) y *Sonidos suaves*. También puedes tocar «Ocultar» en su globo de mensaje. La elección se guarda en el teléfono (`src/lib/boti.tsx`).
+- **Sonidos:** son seis sonidos muy cortos y bajitos (volumen 0.3) guardados en `assets/sonidos/`, con `expo-audio`. Respetan el modo silencio del teléfono y no interrumpen la música.
 
 **Cuenta e inicio de sesión (los dos modos, con una sola cuenta)**
 

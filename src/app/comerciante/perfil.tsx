@@ -5,6 +5,7 @@ import { abrirMapas } from '../../lib/geo';
 import { ratingDe, textoRating, useStore } from '../../store';
 import { Confirmar } from '../../ui/Dialogo';
 import { Icon, IconName } from '../../ui/Icon';
+import { BotiAjustes } from '../../ui/BotiAjustes';
 import { Btn, Card, Group, Screen } from '../../ui/kit';
 import { Logo } from '../../ui/Logo';
 import { T } from '../../ui/T';
@@ -134,6 +135,8 @@ export default function PerfilComerciante() {
           </T>
         ) : null}
       </Card>
+
+      <BotiAjustes />
 
       <Group r={18}>
         <Fila texto="Clientes frecuentes" onPress={() => router.push('/clientes')} />

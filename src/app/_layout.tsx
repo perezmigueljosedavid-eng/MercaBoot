@@ -10,9 +10,11 @@ import { PlusJakartaSans_500Medium } from '@expo-google-fonts/plus-jakarta-sans/
 import { PlusJakartaSans_600SemiBold } from '@expo-google-fonts/plus-jakarta-sans/600SemiBold';
 import { PlusJakartaSans_700Bold } from '@expo-google-fonts/plus-jakarta-sans/700Bold';
 import { PlusJakartaSans_800ExtraBold } from '@expo-google-fonts/plus-jakarta-sans/800ExtraBold';
+import { BotiProvider } from '../lib/boti';
 import { UbicacionProvider } from '../lib/ubicacion';
 import { StoreProvider, useStore } from '../store';
 import { Boti } from '../ui/Boti';
+import { BotiCompania } from '../ui/BotiCompania';
 import { T } from '../ui/T';
 import { C } from '../ui/theme';
 
@@ -120,6 +122,7 @@ function Raiz({ fuentesListas }: { fuentesListas: boolean }) {
           }}
         />
       </SafeAreaInsetsContext.Provider>
+      <BotiCompania />
       <Aviso texto={aviso} />
     </View>
   );
@@ -136,9 +139,11 @@ export default function Layout() {
 
   return (
     <StoreProvider>
-      <UbicacionProvider>
-        <Raiz fuentesListas={fuentes || !!error} />
-      </UbicacionProvider>
+      <BotiProvider>
+        <UbicacionProvider>
+          <Raiz fuentesListas={fuentes || !!error} />
+        </UbicacionProvider>
+      </BotiProvider>
     </StoreProvider>
   );
 }

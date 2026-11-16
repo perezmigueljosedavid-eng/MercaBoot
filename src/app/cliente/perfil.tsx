@@ -3,6 +3,7 @@ import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
 import { useUbicacion } from '../../lib/ubicacion';
 import { useStore } from '../../store';
+import { BotiAjustes } from '../../ui/BotiAjustes';
 import { Btn, Card, Group, Screen } from '../../ui/kit';
 import { Logo } from '../../ui/Logo';
 import { T } from '../../ui/T';
@@ -103,6 +104,8 @@ export default function PerfilCliente() {
           <Btn label="Abrir mi negocio" variant="amber" h={46} r={12} size={14} onPress={() => router.push('/abrir-negocio')} />
         </Card>
       )}
+
+      <BotiAjustes />
 
       <Group r={18}>
         <Fila texto="Mis favoritos" detalle={String(favoritos.length)} onPress={() => router.navigate('/cliente/favoritos')} />

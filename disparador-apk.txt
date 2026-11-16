@@ -1,3 +1,3 @@
 Disparador de compilación del APK.
 Al subir cambios que incluyan este archivo, GitHub vuelve a compilar el APK.
-Compilación n.º 8 · Versión final 4.1 (Boti y detalle de producto)
+Compilación n.º 9 · Versión final 4.2 (Boti mascota)

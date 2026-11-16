@@ -13,7 +13,7 @@ import {
 } from '../data/contenido';
 import type { CategoriaProducto, Etiqueta, TipoProducto } from '../data/tipos';
 import { clasificar, nombreIngrediente, perfilDeProducto } from '../ia/ingredientes';
-import { unidadConMedios } from '../lib/pedidos';
+import { useBoti } from '../lib/boti';
 import { useStore } from '../store';
 import { textoPrecio } from '../ui/bits';
 import { Confirmar } from '../ui/Dialogo';
@@ -63,6 +63,7 @@ function Opcion({ titulo, texto, activa, onPress }: { titulo: string; texto: str
 export default function ProductoForm() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { s, negocio, agregarProducto, editarProducto, eliminarProducto } = useStore();
+  const { decir } = useBoti();
   const giro = negocio?.giro;
   const previo = id ? s.productos.find((p) => p.id === id && p.negocioId === negocio?.id) : undefined;
   const perfilPrevio = useMemo(() => (previo ? perfilDeProducto(previo, giro) : null), [previo, giro]);
@@ -85,8 +86,6 @@ export default function ProductoForm() {
   const [caracteristicas, setCaracteristicas] = useState<string[]>(previo?.caracteristicas ?? []);
   const [caracteristica, setCaracteristica] = useState('');
   const [fotoUri, setFotoUri] = useState<string | undefined>(previo?.fotoUri);
-  // null = automático (kilos y litros en medios); true/false = lo decidió el comerciante.
-  const [medios, setMedios] = useState<boolean | null>(previo?.medios ?? null);
   const [etiquetas, setEtiquetas] = useState<Etiqueta[]>(perfilPrevio?.etiquetas ?? []);
   const [tocado, setTocado] = useState(!!previo?.etiquetas);
   const [error, setError] = useState('');
@@ -189,7 +188,6 @@ export default function ProductoForm() {
       descripcion: descripcion.trim() || undefined,
       caracteristicas: listaCar.length > 0 ? listaCar : undefined,
       fotoUri,
-      medios: medios ?? undefined,
     };
     setGuardando(true);
     const err = previo ? await editarProducto(previo.id, datos) : await agregarProducto(datos);
@@ -210,9 +208,10 @@ export default function ProductoForm() {
       setCaracteristicas([]);
       setCaracteristica('');
       setFotoUri(undefined);
-      setMedios(null);
+      decir('¡Producto publicado! Tus clientes ya lo ven.', { pose: 'palma', sonido: 'aviso', ms: 4000 });
       return;
     }
+    decir(previo ? '¡Cambios guardados!' : '¡Producto publicado! Tus clientes ya lo ven.', { pose: 'palma', sonido: 'aviso', ms: 4000 });
     goBack('/comerciante/productos');
   }
 
@@ -289,24 +288,6 @@ export default function ProductoForm() {
             Tú decides la cantidad que cobras: si vendes por medio litro, elige «{UNIDAD_OTRA}» y escribe «1/2 litro»; el precio será el de esa cantidad.
           </T>
         </View>
-
-        <Card style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingVertical: 14, paddingHorizontal: 16 }}>
-          <View style={{ flex: 1, gap: 2 }}>
-            <T size={15} weight={700}>
-              Se puede pedir en medios
-            </T>
-            <T size={12} lh={1.4} color={C.muted}>
-              {(medios ?? unidadConMedios(unidad === UNIDAD_OTRA ? unidadOtra : unidad))
-                ? `Tus clientes podrán pedir ½, 1 ½, 2 ½… ${(unidad === UNIDAD_OTRA ? unidadOtra.trim() : unidad) || ''}`.trim() + '.'
-                : 'Tus clientes pedirán cantidades enteras: 1, 2, 3…'}
-            </T>
-          </View>
-          <Toggle
-            value={medios ?? unidadConMedios(unidad === UNIDAD_OTRA ? unidadOtra : unidad)}
-            onChange={(v) => setMedios(v)}
-            label="Se puede pedir en medios"
-          />
-        </Card>
 
         <View style={{ gap: 6 }}>
           <Field

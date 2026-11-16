@@ -3,6 +3,7 @@ import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
 import type { EntregaPedido, PagoPedido } from '../data/tipos';
 import { cantidadTexto, dinero, disponibleParaPedir, importeLinea, minutosEnPalabras, pasoCantidad, totales } from '../lib/pedidos';
+import { useBoti } from '../lib/boti';
 import { useStore } from '../store';
 import { textoPrecio } from '../ui/bits';
 import { Boti } from '../ui/Boti';
@@ -17,6 +18,7 @@ import { C } from '../ui/theme';
 /** El carrito del cliente: revisa lo que lleva, elige cómo recibir y pagar, y aparta el pedido. */
 export default function Carrito() {
   const { s, cuenta, carrito, ponerCantidad, quitarDelCarrito, vaciarCarrito, crearPedido } = useStore();
+  const { decir } = useBoti();
   const [entregaElegida, setEntrega] = useState<EntregaPedido>('recoger');
   const [pagoElegido, setPago] = useState<PagoPedido>('en_persona');
   const [direccion, setDireccion] = useState('');
@@ -88,6 +90,7 @@ export default function Carrito() {
     const r = await crearPedido({ entrega, direccion, pago, nota });
     setEnviando(false);
     if ('error' in r) return setError(r.error);
+    decir('¡Pedido enviado! Te aviso cuando el negocio lo acepte.', { pose: 'fiesta', sonido: 'confeti', ms: 6000 });
     router.replace(`/pedido/${r.pedido.id}`);
   }
 

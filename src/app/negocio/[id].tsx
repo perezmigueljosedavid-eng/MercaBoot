@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { nombreCategoria, textoEtiquetas } from '../../data/contenido';
 import { perfilDeProducto } from '../../ia/ingredientes';
 import { abrirMapas, abrirTelefono, distanciaA, etiquetaDistancia } from '../../lib/geo';
+import { useBoti } from '../../lib/boti';
 import { useUbicacion } from '../../lib/ubicacion';
 import { cantidadTexto, dinero, disponibleParaPedir, minutosEnPalabras, pasoCantidad, sePuedePedir } from '../../lib/pedidos';
 import { avisosVigentes, OTRO_NEGOCIO, ratingDe, textoRating, useStore } from '../../store';
@@ -35,6 +36,7 @@ function Dato({ icono, texto }: { icono: IconName; texto: string }) {
 export default function Negocio() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { s, cuenta, favoritos, toggleFavorito, cambiarModo, carrito, agregarAlCarrito, ponerCantidad } = useStore();
+  const { decir } = useBoti();
   const insets = useSafeAreaInsets();
   const { coords } = useUbicacion();
   const [cambio, setCambio] = useState<string | null>(null);
@@ -82,6 +84,7 @@ export default function Negocio() {
     const r = agregarAlCarrito(productoId);
     if (r === OTRO_NEGOCIO) setCambio(productoId);
     else if (r) setMensaje(r);
+    else decir('¡Anotado! Ya está en tu carrito.', { pose: 'caja', sonido: 'aviso', ms: 3500 });
   };
   const disponibles = productos.filter((p) => p.disponible);
   const agotados = productos.filter((p) => !p.disponible);
