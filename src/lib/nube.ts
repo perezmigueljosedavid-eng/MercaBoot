@@ -74,6 +74,11 @@ export interface FilaProducto {
   tipo?: string | null;
   etiquetas?: string[] | null;
   ingrediente?: string | null;
+  /** Detalle que ve el cliente (pueden faltar en copias guardadas de versiones anteriores). */
+  descripcion?: string | null;
+  caracteristicas?: string[] | null;
+  foto_uri?: string | null;
+  medios?: boolean | null;
 }
 
 export interface FilaAviso {
@@ -238,6 +243,10 @@ export const productoDeFila = (f: FilaProducto): Producto => {
     etiquetas: etiquetas.length > 0 ? etiquetas : undefined,
     ingrediente: txt(f.ingrediente),
     porEncargo: !!f.por_encargo,
+    descripcion: txt(f.descripcion),
+    caracteristicas: f.caracteristicas && f.caracteristicas.length > 0 ? f.caracteristicas.filter((c) => typeof c === 'string' && c.trim()).slice(0, 6) : undefined,
+    fotoUri: txt(f.foto_uri),
+    medios: f.medios == null ? undefined : !!f.medios,
     cantidad: num(f.cantidad),
     apartado: num(f.apartado) ?? 0,
     actualizado: ms(f.actualizado),

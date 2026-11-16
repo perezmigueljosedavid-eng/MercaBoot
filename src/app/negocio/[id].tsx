@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Image, Modal, Pressable, ScrollView, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { nombreCategoria, textoEtiquetas } from '../../data/contenido';
@@ -40,6 +40,8 @@ export default function Negocio() {
   const [cambio, setCambio] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState('');
   const [pestana, setPestana] = useState<Pestana>('productos');
+  // Producto abierto en la hoja de detalle (foto, descripción y características).
+  const [detalleId, setDetalleId] = useState<string | null>(null);
 
   // El aviso se quita solo.
   useEffect(() => {
@@ -93,20 +95,28 @@ export default function Negocio() {
     const tope = disponibleParaPedir(p);
     return (
       <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14 }}>
-        <View style={{ flex: 1, gap: 3 }}>
-          <T size={15} weight={600} color={p.disponible ? C.ink : C.muted}>
-            {p.nombre}
-          </T>
-          <T size={13} color={C.muted}>
-            {textoPrecio(p.precio, p.unidad)}
-            {p.porEncargo ? ' · por encargo' : ''}
-          </T>
-          <T size={12} color={C.muted}>
-            {[nombreCategoria(p.categoria), textoEtiquetas(perfilDeProducto(p, n.giro).etiquetas, 3)].filter(Boolean).join(' · ')}
-            {p.disponible && libre != null && libre > 0 ? ` · Quedan ${cantidadTexto(libre)}` : ''}
-            {todoApartado ? ' · Todo apartado por ahora' : ''}
-          </T>
-        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Ver detalles de ${p.nombre}`}
+          onPress={() => setDetalleId(p.id)}
+          style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}
+        >
+          {p.fotoUri ? <Image source={{ uri: p.fotoUri }} style={{ width: 52, height: 52, borderRadius: 12, backgroundColor: C.bg }} /> : null}
+          <View style={{ flex: 1, gap: 3 }}>
+            <T size={15} weight={600} color={p.disponible ? C.ink : C.muted}>
+              {p.nombre}
+            </T>
+            <T size={13} color={C.muted}>
+              {textoPrecio(p.precio, p.unidad)}
+              {p.porEncargo ? ' · por encargo' : ''}
+            </T>
+            <T size={12} color={C.muted}>
+              {[nombreCategoria(p.categoria), textoEtiquetas(perfilDeProducto(p, n.giro).etiquetas, 3)].filter(Boolean).join(' · ')}
+              {p.disponible && libre != null && libre > 0 ? ` · Quedan ${cantidadTexto(libre)}` : ''}
+              {todoApartado ? ' · Todo apartado por ahora' : ''}
+            </T>
+          </View>
+        </Pressable>
         <View style={{ alignItems: 'flex-end', gap: 8 }}>
           <Badge bg={todoApartado ? C.amberTint : p.disponible ? C.greenTint : C.redTint} fg={todoApartado ? C.amberText : p.disponible ? C.greenDark : C.red}>
             {todoApartado ? 'Apartado' : p.disponible ? (p.porEncargo ? 'Por encargo' : 'Hay') : p.porEncargo ? 'Sin pedidos' : 'Agotado'}
@@ -119,7 +129,7 @@ export default function Negocio() {
                 etiqueta={p.nombre}
                 masDeshabilitado={cant >= tope}
                 onMenos={() => {
-                  const r = ponerCantidad(p.id, cant - pasoCantidad(p.unidad));
+                  const r = ponerCantidad(p.id, cant - pasoCantidad(p.unidad, p.medios));
                   if (r) setMensaje(r);
                 }}
                 onMas={() => agregar(p.id)}
@@ -454,6 +464,88 @@ export default function Negocio() {
         </View>
       </View>
     ) : null}
+
+    {/* Hoja de detalle del producto: foto, precio, descripción y características (como en las tiendas en línea). */}
+    {(() => {
+      const p = detalleId ? productos.find((x) => x.id === detalleId) : null;
+      if (!p) return null;
+      const cant = enCarrito(p.id);
+      return (
+        <Modal transparent animationType="slide" visible onRequestClose={() => setDetalleId(null)}>
+          <Pressable accessibilityLabel="Cerrar" onPress={() => setDetalleId(null)} style={{ flex: 1, backgroundColor: 'rgba(15, 26, 20, 0.45)' }} />
+          <View style={{ backgroundColor: C.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '82%', paddingBottom: insets.bottom + 16 }}>
+            <View style={{ alignItems: 'center', paddingTop: 10 }}>
+              <View style={{ width: 44, height: 5, borderRadius: 3, backgroundColor: C.input }} />
+            </View>
+            <ScrollView contentContainerStyle={{ padding: 20, gap: 14 }}>
+              {p.fotoUri ? (
+                <Image source={{ uri: p.fotoUri }} style={{ width: '100%', aspectRatio: 1.6, borderRadius: 18, backgroundColor: C.bg }} resizeMode="cover" accessibilityLabel={`Foto de ${p.nombre}`} />
+              ) : null}
+              <View style={{ gap: 6 }}>
+                <T size={21} weight={800} lh={1.25}>
+                  {p.nombre}
+                </T>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                  <T size={19} weight={800} color={C.greenDark}>
+                    {textoPrecio(p.precio, p.unidad)}
+                  </T>
+                  <Badge bg={p.disponible ? C.greenTint : C.redTint} fg={p.disponible ? C.greenDark : C.red}>
+                    {p.disponible ? (p.porEncargo ? 'Por encargo' : 'Hay ahora') : p.porEncargo ? 'Sin pedidos por ahora' : 'Agotado'}
+                  </Badge>
+                </View>
+                {pasoCantidad(p.unidad, p.medios) === 0.5 ? (
+                  <T size={12.5} color={C.muted}>
+                    Puedes pedir en medios: ½, 1 ½, 2 ½… {p.unidad}
+                  </T>
+                ) : null}
+              </View>
+              {p.descripcion ? (
+                <View style={{ gap: 6, padding: 14, borderRadius: 16, backgroundColor: C.bg }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Icon name="info" size={15} color={C.ink} />
+                    <T size={14} weight={700}>
+                      Información
+                    </T>
+                  </View>
+                  <T size={14} lh={1.5} color={C.greyText}>
+                    {p.descripcion}
+                  </T>
+                </View>
+              ) : null}
+              {p.caracteristicas && p.caracteristicas.length > 0 ? (
+                <View style={{ gap: 8 }}>
+                  <T size={14} weight={700}>
+                    Características importantes
+                  </T>
+                  <View style={{ gap: 6 }}>
+                    {p.caracteristicas.map((c) => (
+                      <View key={c} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.green, marginTop: 6 }} />
+                        <T size={14} lh={1.45} color={C.greyText} style={{ flex: 1 }}>
+                          {c}
+                        </T>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+              <T size={12} color={C.muted}>
+                {nombreCategoria(p.categoria)} · Vendido por {n.nombre}
+              </T>
+              {puedePedir && sePuedePedir(p) ? (
+                <Btn
+                  label={cant > 0 ? `Agregar otro (llevas ${cantidadTexto(cant)})` : 'Agregar al carrito'}
+                  onPress={() => {
+                    agregar(p.id);
+                    setDetalleId(null);
+                  }}
+                />
+              ) : null}
+            </ScrollView>
+          </View>
+        </Modal>
+      );
+    })()}
 
     <Confirmar
       visible={cambio != null}

@@ -6,6 +6,7 @@ import { insigniasDeTiendas, tiendasSegun, useNegociosOrdenados, VISTAS_TIENDAS,
 import { avisosVigentes, useStore } from '../../store';
 import { LoMasBarato } from '../../ui/Baratas';
 import { AvisoFila } from '../../ui/bits';
+import { Boti } from '../../ui/Boti';
 import { FiestaCerca } from '../../ui/FiestaCerca';
 import { Icon } from '../../ui/Icon';
 import { Chip, Group, Screen, SectionTitle } from '../../ui/kit';
@@ -101,19 +102,19 @@ export default function HomeCliente() {
 
       <UbicacionBanner />
 
-      {/* tarjeta de IA */}
-      <View style={{ gap: 14, padding: 20, borderRadius: 20, backgroundColor: C.green }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: C.white, alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name="sparkles" size={20} color={C.green} />
+      {/* tarjeta de IA, con Boti de cocinero */}
+      <View style={{ gap: 12, padding: 20, borderRadius: 20, backgroundColor: C.green }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <Boti pose="cocina" size={86} claro />
+          <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
+            <T size={18} weight={700} color={C.white}>
+              ¿Qué se te antoja?
+            </T>
+            <T size={13.5} lh={1.4} color={C.white}>
+              Dile a Boti tu antojo y te da ideas de recetas con lo que hay hoy en las tiendas, y dónde conseguirlo.
+            </T>
           </View>
-          <T size={18} weight={700} color={C.white}>
-            ¿Qué se te antoja?
-          </T>
         </View>
-        <T size={14} lh={1.45} color={C.white}>
-          Dinos tu antojo y te damos ideas de recetas con lo que hay hoy en las tiendas de tu comunidad, y te decimos dónde conseguirlo.
-        </T>
         <View
           style={{
             flexDirection: 'row',

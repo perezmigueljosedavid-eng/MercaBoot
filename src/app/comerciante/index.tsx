@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import type { TipoAviso } from '../../data/tipos';
 import { avisosVigentes, ratingDe, textoRating, useStore, type EstadoRed } from '../../store';
 import { haceCuanto, textoPrecio } from '../../ui/bits';
+import { Boti } from '../../ui/Boti';
 import { FiestaProxima } from '../../ui/Fiestas';
 import { Btn, Card, Group, Screen, SectionTitle, Toggle } from '../../ui/kit';
 import { Logo } from '../../ui/Logo';
@@ -163,11 +164,19 @@ export default function HomeComerciante() {
       {/* fiesta que se acerca */}
       <FiestaProxima giro={negocio.giro} />
 
-      {/* aviso rápido */}
+      {/* aviso rápido, con Boti y su megáfono */}
       <View style={{ gap: 14, padding: 18, borderRadius: 20, backgroundColor: C.green }}>
-        <T size={18} weight={700} color={C.white}>
-          Publicar un aviso rápido
-        </T>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Boti pose="megafono" size={72} claro />
+          <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+            <T size={18} weight={700} color={C.white}>
+              Publicar un aviso rápido
+            </T>
+            <T size={13} lh={1.35} color={C.white} style={{ opacity: 0.9 }}>
+              ¿Se acabó algo o llegó algo nuevo? Tus clientes lo ven al instante.
+            </T>
+          </View>
+        </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {RAPIDOS.map((x) => (
             <Pressable
@@ -192,9 +201,17 @@ export default function HomeComerciante() {
       <View style={{ gap: 12 }}>
         <SectionTitle title="Mis productos" link={propios.length ? 'Ver todos' : undefined} onLink={() => router.navigate('/comerciante/productos')} />
         {vacio ? (
-          <T size={14} lh={1.45} color={C.muted}>
-            Todavía no has publicado nada. Agrega lo que vendes, con el nombre que tú quieras, y marca si hay o ya se acabó.
-          </T>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: 16, backgroundColor: C.amberTint }}>
+            <Boti pose="palma" size={84} />
+            <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+              <T size={14} weight={700} color={C.amberText}>
+                Primer paso: publica lo que vendes
+              </T>
+              <T size={13} lh={1.4} color={C.amberText}>
+                Agrega lo que vendes, con el nombre que tú quieras, y marca si hay o ya se acabó. Con 3 productos tus vecinos ya te encuentran al buscar.
+              </T>
+            </View>
+          </View>
         ) : (
           <Group>
             {[...propios]

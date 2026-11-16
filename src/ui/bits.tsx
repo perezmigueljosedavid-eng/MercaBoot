@@ -81,7 +81,8 @@ export function AvisoFila({ a, mostrarNegocio = true }: { a: AvisoMostrable; mos
 export function textoPrecio(precio?: number, unidad?: string) {
   if (precio == null) return 'Precio por confirmar';
   const p = Number.isInteger(precio) ? `$${precio}` : `$${precio.toFixed(2)}`;
-  return unidad ? `${p} por ${unidad}` : p;
+  // Sin la palabra «por»: la unidad ya dice la cantidad («kg», «1/2 litro», «docena»…).
+  return unidad ? `${p} · ${unidad}` : p;
 }
 
 /** "hace 5 min", "hace 3 h", "ayer", "hace 4 días" */

@@ -25,14 +25,29 @@ export function dinero(n: number): string {
 }
 
 /** 2 → «2» · 1.5 → «1.5» */
-export const cantidadTexto = (n: number) => String(redondear(n));
+export const cantidadTexto = (n: number) => {
+  const r = redondear(n);
+  // Los medios se escriben como en el mercado: «½», «1 ½», «2 ½»…
+  if (Math.abs(r % 1 - 0.5) < 1e-9) {
+    const entero = Math.floor(r);
+    return entero === 0 ? '½' : `${entero} ½`;
+  }
+  return String(r);
+};
 
-/** «2 kg», «1.5 litro», «3 pieza» */
+/** «2 kg», «1 ½ litro», «3 pieza» */
 export const cantidadConUnidad = (n: number, unidad: string) => `${cantidadTexto(n)} ${unidad}`;
 
-/** De cuánto en cuánto sube o baja la cantidad en el carrito: kilos y litros de medio en medio; lo demás, de uno en uno. */
-export function pasoCantidad(unidad: string): number {
-  return /^(kg|kilo|kilos|litro|litros|l|lt)$/i.test(unidad.trim()) ? 0.5 : 1;
+/** ¿La unidad se pide en medios aunque el comerciante no lo haya dicho? (kilos y litros sí) */
+export const unidadConMedios = (unidad: string) => /^(kg|kilo|kilos|litro|litros|l|lt|medio kilo|1\/2 kilo|½ kilo|medio litro|1\/2 litro|½ litro)$/i.test(unidad.trim());
+
+/**
+ * De cuánto en cuánto sube o baja la cantidad en el carrito.
+ * Manda lo que decidió el comerciante (`medios`); si no dijo nada, kilos y litros van de medio en medio y lo demás de uno en uno.
+ */
+export function pasoCantidad(unidad: string, medios?: boolean): number {
+  if (medios != null) return medios ? 0.5 : 1;
+  return unidadConMedios(unidad) ? 0.5 : 1;
 }
 
 /** Cuánto se puede pedir ahora de un producto: sus existencias menos lo que otros ya apartaron. */

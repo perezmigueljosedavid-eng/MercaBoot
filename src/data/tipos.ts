@@ -103,6 +103,14 @@ export interface Producto {
   ingrediente?: string;
   /** Se prepara cuando alguien lo pide (pasteles, platillos…). */
   porEncargo?: boolean;
+  /** Descripción que ve el cliente en el detalle del producto (opcional). */
+  descripcion?: string;
+  /** Características importantes que ve el cliente, por ejemplo «Ideal para caldos» (máx. 6). */
+  caracteristicas?: string[];
+  /** Foto del producto (opcional); se guarda como imagen dentro del texto, igual que el logo. */
+  fotoUri?: string;
+  /** Se puede pedir en medios: ½, 1½, 2½… Si falta, la app lo deduce de la unidad (kg y litros sí). */
+  medios?: boolean;
   /** Existencias (opcional): si el comerciante no las lleva, vale `undefined` y no hay límite. */
   cantidad?: number;
   /** Cuánto está apartado ahora en pedidos activos (lo calcula la base de datos). */

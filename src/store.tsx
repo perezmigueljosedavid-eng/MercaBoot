@@ -106,6 +106,11 @@ export interface DatosProducto {
   tipo?: TipoProducto;
   etiquetas?: Etiqueta[];
   ingrediente?: string;
+  /** Detalle que ve el cliente: descripción, características, foto y si se vende en medios (½). */
+  descripcion?: string;
+  caracteristicas?: string[];
+  fotoUri?: string;
+  medios?: boolean;
 }
 
 /** Un aviso nuevo del comerciante. `hasta` (ms): sin valor, «ya no hay / ya hay / cerrado» duran hasta el fin del día y lo demás no vence. */
@@ -1295,12 +1300,24 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   /* ───── productos ───── */
 
+  /** Revisa los datos de detalle del producto; devuelve el motivo si algo no va. */
+  function malDetalleProducto(d: Partial<DatosProducto>): string | null {
+    if (d.descripcion != null && d.descripcion.trim().length > 500) return 'La descripción puede tener hasta 500 letras.';
+    if (d.caracteristicas != null) {
+      if (d.caracteristicas.length > 6) return 'Puedes poner hasta 6 características.';
+      if (d.caracteristicas.some((c) => !c.trim() || c.trim().length > 60)) return 'Cada característica puede tener hasta 60 letras.';
+    }
+    return null;
+  }
+
   const agregarProducto = useCallback<Ctx['agregarProducto']>(async (d) => {
     const mio = miNegocio();
     if (!mio) return 'Tu cuenta no administra ningún negocio.';
     const nombre = d.nombre.trim();
     if (!nombre) return 'Escribe el nombre del producto.';
     if (d.cantidad != null && !(d.cantidad >= 0 && d.cantidad <= 99999999)) return 'Las existencias deben ser un número de 0 en adelante.';
+    const malDetalle = malDetalleProducto(d);
+    if (malDetalle) return malDetalle;
     if (baseRef.current.productos.some((x) => x.negocioId === mio.id && x.nombre.trim().toLowerCase() === nombre.toLowerCase())) {
       return 'Ya tienes un producto con ese nombre.';
     }
@@ -1318,6 +1335,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         tipo: d.tipo ?? null,
         etiquetas: d.etiquetas ?? [],
         ingrediente: d.ingrediente ?? null,
+        descripcion: d.descripcion?.trim() || null,
+        caracteristicas: (d.caracteristicas ?? []).map((c) => c.trim()).filter(Boolean),
+        foto_uri: d.fotoUri || null,
+        medios: d.medios ?? null,
       })
       .select('*')
       .single();
@@ -1330,6 +1351,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const mio = miNegocio();
     const prod = baseRef.current.productos.find((x) => x.id === id);
     if (!mio || !prod || prod.negocioId !== mio.id) return 'No encontramos ese producto.';
+    const malDetalle = malDetalleProducto(d);
+    if (malDetalle) return malDetalle;
     const fila: Record<string, unknown> = {};
     if (d.nombre !== undefined) {
       const nombre = d.nombre.trim();
@@ -1351,6 +1374,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if ('tipo' in d) fila.tipo = d.tipo ?? null;
     if ('etiquetas' in d) fila.etiquetas = d.etiquetas ?? [];
     if ('ingrediente' in d) fila.ingrediente = d.ingrediente ?? null;
+    if ('descripcion' in d) fila.descripcion = d.descripcion?.trim() || null;
+    if ('caracteristicas' in d) fila.caracteristicas = (d.caracteristicas ?? []).map((c) => c.trim()).filter(Boolean);
+    if ('fotoUri' in d) fila.foto_uri = d.fotoUri || null;
+    if ('medios' in d) fila.medios = d.medios ?? null;
     if (Object.keys(fila).length === 0) return null;
     const { data, error } = await supabase.from('productos').update(fila).eq('id', id).select('*');
     if (error) return (error as { code?: string }).code === '23505' ? 'Ya tienes un producto con ese nombre.' : textoError(error);
@@ -1567,7 +1594,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const ya = lineas.find((l) => l.productoId === productoId)?.cantidad ?? 0;
       if (!ya && lineas.length >= 30) return 'Un pedido puede llevar hasta 30 productos distintos.';
       // La primera vez se agrega 1; después sube de a poco (medio kilo, un litro…).
-      const nueva = redondear(Math.min(tope, ya + (cantidad ?? (ya ? pasoCantidad(prod.unidad) : 1))));
+      const nueva = redondear(Math.min(tope, ya + (cantidad ?? (ya ? pasoCantidad(prod.unidad, prod.medios) : 1))));
       if (nueva <= ya) return `De «${prod.nombre}» solo quedan ${cantidadTexto(tope)} ${prod.unidad}.`;
       fijarCarro({
         uid: id,

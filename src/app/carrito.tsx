@@ -5,6 +5,7 @@ import type { EntregaPedido, PagoPedido } from '../data/tipos';
 import { cantidadTexto, dinero, disponibleParaPedir, importeLinea, minutosEnPalabras, pasoCantidad, totales } from '../lib/pedidos';
 import { useStore } from '../store';
 import { textoPrecio } from '../ui/bits';
+import { Boti } from '../ui/Boti';
 import { Confirmar } from '../ui/Dialogo';
 import { Icon } from '../ui/Icon';
 import { BackBtn, Btn, Card, Chip, Field, goBack, Group, OpenDot, Screen } from '../ui/kit';
@@ -40,7 +41,7 @@ export default function Carrito() {
           <BackBtn />
         </View>
         <View style={{ alignItems: 'center', gap: 10, paddingHorizontal: 32, paddingTop: 40 }}>
-          <Icon name="cart" size={40} color={C.dash} />
+          <Boti pose="caja" size={130} />
           <T size={18} weight={800}>
             Tu carrito está vacío
           </T>
@@ -157,11 +158,11 @@ export default function Carrito() {
                     etiqueta={p.nombre}
                     masDeshabilitado={cantidad >= disponibleParaPedir(p)}
                     onMenos={() => {
-                      const r = ponerCantidad(p.id, cantidad - pasoCantidad(p.unidad));
+                      const r = ponerCantidad(p.id, cantidad - pasoCantidad(p.unidad, p.medios));
                       setAviso(r ?? '');
                     }}
                     onMas={() => {
-                      const r = ponerCantidad(p.id, cantidad + pasoCantidad(p.unidad));
+                      const r = ponerCantidad(p.id, cantidad + pasoCantidad(p.unidad, p.medios));
                       setAviso(r ?? '');
                     }}
                   />

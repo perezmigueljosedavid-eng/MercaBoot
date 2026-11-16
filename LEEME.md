@@ -36,6 +36,10 @@ Está hecha con Expo / React Native: **el mismo código** funciona en Android, e
 
 ## Qué incluye
 
+**Boti, el asistente que te guía**
+
+- **Boti** es el personaje propio de Mercaboot: una bolsita del mandado verde con su franja ámbar (diseño propio del equipo). Saluda en la **bienvenida**, cocina en **«¿Qué se te antoja?»**, busca con su **lupa** cuando no hay resultados, anuncia con su **megáfono** en el inicio del comerciante, acompaña el **carrito vacío** con su caja y **se duerme** cuando no hay internet. Vive en `src/ui/Boti.tsx` y cambia de gesto y accesorio según la pantalla.
+
 **Cuenta e inicio de sesión (los dos modos, con una sola cuenta)**
 
 - Crear cuenta como **cliente** o como **comerciante** (nombre, correo, teléfono de 10 dígitos y contraseña de 8 o más caracteres; todo se valida).
@@ -46,7 +50,7 @@ Está hecha con Expo / React Native: **el mismo código** funciona en Android, e
 
 - **Inicio**: saludo, buscador, **«¿Qué se te antoja?»** (asistente de recetas), la **fiesta que se acerca**, **«Lo más barato hoy»**, **«Tiendas para ti»** (vistas *Cerca de ti*, *Mejor calificadas*, *A domicilio* y *Abiertas ahora*, más categorías por tipo de negocio) y **«Avisos de hoy»**. La campana abre **Avisos y novedades**.
 - **Buscar** productos y negocios (sin importar mayúsculas ni acentos), ordenados por *Más cerca*, *Más barato* o *Mejor calificadas*.
-- **Ficha del negocio** con tres pestañas: **Productos** (hay / agotado / por encargo / cuántos quedan, en vivo y con el botón **Agregar** al carrito), **Avisos** y **Reseñas**. Además: dirección y distancia, horario, **Llamar**, **Cómo llegar**, **Chatear**, calificación con estrellas y guardar en **favoritos**.
+- **Ficha del negocio** con tres pestañas: **Productos** (hay / agotado / por encargo / cuántos quedan, en vivo y con el botón **Agregar** al carrito), **Avisos** y **Reseñas**. Al tocar un producto se abre su **detalle** (foto, precio, descripción y «Características importantes», como en las tiendas en línea). Además: dirección y distancia, horario, **Llamar**, **Cómo llegar**, **Chatear**, calificación con estrellas y guardar en **favoritos**.
 - **Reseñas con estrellas** (de 1 a 5, con etiquetas como «Buen trato» y un comentario): una por persona y por negocio; se puede **editar** o **quitar** desde *Perfil → Mis reseñas*. El dueño no puede calificar su propio negocio.
 - **Carrito y pedidos**: productos de **un** negocio; se elige **«Paso a recogerlo»** o **«A domicilio»** (con su dirección) y pagar **«En persona»** o **«Transferencia»**. Los productos quedan **apartados** por el tiempo que fije el negocio. Cada botón responde siempre: si el negocio no ofrece algo (por ejemplo, no entrega a domicilio), la app **lo explica** y ofrece **preguntar por el chat**.
 - **Pedidos**: en qué va cada pedido (esperando respuesta, apartado con su cuenta regresiva, «va en camino», entregado), datos de transferencia, «Ya pagué», cancelar e historial.
@@ -59,7 +63,7 @@ Está hecha con Expo / React Native: **el mismo código** funciona en Android, e
 
 - **Registrar su negocio**: uno nuevo (nombre, tipo entre 28 giros u «Otro», dirección) o **reclamar una de las tiendas reales del directorio** con su código de reclamo.
 - **Inicio**: interruptor de **abierto / cerrado**, indicador «En vivo», productos disponibles y agotados, **pedidos nuevos**, **chats sin leer**, **avisos publicados**, **calificación** con estrellas, la **fiesta que se acerca** con ideas para su giro y **botones rápidos** para publicar un aviso («Ya no hay…», «Ya hay…», «Promoción», «Regalo», «Cerrado hoy»).
-- **Productos**: agregar, editar y eliminar; cada producto es **«Para cocinar»** (ingrediente) o **«Ya preparado»** y lleva **etiquetas** (dulce, picante, vegetariano…); **existencias**; marcar **disponible / agotado** con un toque.
+- **Productos**: agregar, editar y eliminar; cada producto es **«Para cocinar»** (ingrediente) o **«Ya preparado»** y lleva **etiquetas** (dulce, picante, vegetariano…); **existencias**; marcar **disponible / agotado** con un toque. El comerciante decide **cómo lo vende y por qué cantidad** (kilo, pieza, «1/2 litro», «bolsa de 1/2 kg»…): el precio es el de esa cantidad y el cliente lo ve como «$32 · kg», sin la palabra «por». También puede marcar si se **pide en medios** (½, 1 ½, 2 ½…) y agregar **detalles opcionales**: una **foto**, una **descripción** y hasta 6 **características importantes** («Ideal para caldos», «Rico en fósforo»…), que el cliente ve al tocar el producto.
 - **Avisos**: *Ya no hay…* y *Ya hay…* (cambian solos el producto a agotado o disponible), *Promoción*, *Regalo* y *Cerrado hoy*, con vigencia (hoy, una semana, hasta Navidad…), ideas para **fiestas** (Día de las Madres, Día de Muertos, Navidad…) y **Quitar** cuando ya no valen. Los clientes los ven **en vivo**.
 - **Pedidos**: llegan en vivo; **Aceptar / Rechazar**, **Marcar listo** o **Salió a domicilio**, **Confirmar pago**, **Dar 30 minutos más**, **No se presentó**, **Entregado y cobrado**.
 - **Clientes frecuentes**: el comerciante decide quién lo es y qué le da (descuento de 0 a 50 %, regalo o cupón).
@@ -87,6 +91,7 @@ Estos pasos sirven para repetirlo con **otro** proyecto. Se hace una sola vez y 
 2. **SQL Editor → New query** → pega **todo** [`supabase/esquema.sql`](supabase/esquema.sql) → **Run**. Se puede ejecutar más de una vez sin borrar datos. Crea las tablas, las reglas de seguridad (RLS), el tiempo real, los pedidos, las reseñas, los avisos y las 3 tiendas del directorio.
    *Si ya tenías instalado el Avance 2.1*, basta con ejecutar [`supabase/actualizacion-final.sql`](supabase/actualizacion-final.sql) (agrega reseñas, avisos y los datos nuevos de los productos sin borrar nada).
    *Si ya tenías instalada la versión final*, ejecuta [`supabase/actualizacion-seguridad.sql`](supabase/actualizacion-seguridad.sql) (límites de uso, registro de seguridad y validaciones extra; no borra nada).
+   *Después de la revisión de seguridad se agregó el detalle de producto*: si tu base es anterior a eso, ejecuta también [`supabase/actualizacion-detalle-productos.sql`](supabase/actualizacion-detalle-productos.sql) (foto, descripción, características y venta en medios; no borra nada).
    *Opcional*: activa la extensión **pg_cron** (Integrations → Cron) para que los pedidos vencidos y los avisos caducados se limpien cada minuto aunque nadie tenga la app abierta.
 3. **Authentication → Sign In / Providers → Email**: **apaga «Confirm email»** y guarda (si no, cada cuenta nueva tendría que confirmarse desde un correo).
 4. *(Opcional, para «¿Olvidaste tu contraseña?»)* **Authentication → URL Configuration → Redirect URLs** → agrega `mercaboot://**` y la dirección de la app web.

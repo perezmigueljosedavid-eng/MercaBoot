@@ -3,8 +3,8 @@ import { View } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import { COMUNIDAD } from '../data/contenido';
 import { useStore } from '../store';
+import { Boti } from '../ui/Boti';
 import { Btn, Screen } from '../ui/kit';
-import { Icon } from '../ui/Icon';
 import { T } from '../ui/T';
 import { C } from '../ui/theme';
 
@@ -14,25 +14,31 @@ export default function Bienvenida() {
 
   return (
     <Screen light bg={C.green} scroll={false} bottomInset contentStyle={{ paddingHorizontal: 24, paddingTop: 40, paddingBottom: 24 }}>
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 20 }}>
-        <View
-          style={{
-            width: 96,
-            height: 96,
-            borderRadius: 28,
-            backgroundColor: C.white,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Icon name="bagCheck" size={52} color={C.green} stroke={1.8} />
-        </View>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 }}>
         <T size={40} weight={800} ls={-0.03} color={C.white}>
           Mercaboot
         </T>
-        <T size={17} lh={1.45} color={C.white} style={{ maxWidth: 280, textAlign: 'center' }}>
-          Lo que hay hoy en los negocios de tu barrio, antes de salir de casa.
-        </T>
+        <View style={{ alignItems: 'center' }}>
+          <View style={{ backgroundColor: C.white, borderRadius: 18, paddingVertical: 12, paddingHorizontal: 16, maxWidth: 290 }}>
+            <T size={15} lh={1.4} weight={600} style={{ textAlign: 'center' }}>
+              ¡Hola! Soy Boti. Te enseño qué hay hoy en los negocios de tu barrio, antes de salir de casa.
+            </T>
+          </View>
+          {/* piquito del globo de diálogo */}
+          <View
+            style={{
+              width: 0,
+              height: 0,
+              borderLeftWidth: 10,
+              borderRightWidth: 10,
+              borderTopWidth: 11,
+              borderLeftColor: 'transparent',
+              borderRightColor: 'transparent',
+              borderTopColor: C.white,
+            }}
+          />
+          <Boti pose="saludo" size={190} claro />
+        </View>
         <T size={13} lh={1.4} color={C.white} style={{ maxWidth: 260, textAlign: 'center', opacity: 0.85 }}>
           {COMUNIDAD}
         </T>

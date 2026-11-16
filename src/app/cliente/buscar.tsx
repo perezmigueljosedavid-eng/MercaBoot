@@ -16,6 +16,7 @@ import { etiquetaDistancia } from '../../lib/geo';
 import { useUbicacion } from '../../lib/ubicacion';
 import { useStore } from '../../store';
 import { textoPrecio } from '../../ui/bits';
+import { Boti } from '../../ui/Boti';
 import { Icon } from '../../ui/Icon';
 import { Badge, Chip, Screen, Tag } from '../../ui/kit';
 import { Logo } from '../../ui/Logo';
@@ -216,9 +217,12 @@ export default function Buscar() {
       </T>
       <View style={{ gap: 12 }}>
         {tiendas.length === 0 ? (
-          <T size={14} color={C.muted}>
-            No encontramos negocios con esos datos.
-          </T>
+          <View style={{ alignItems: 'center', gap: 8, paddingTop: 12 }}>
+            <Boti pose="lupa" size={120} />
+            <T size={14} color={C.muted}>
+              Boti no encontró negocios con esos datos.
+            </T>
+          </View>
         ) : (
           tiendas.map((d) => <NegocioCard key={d.n.id} d={d} favorito={favoritos.includes(d.n.id)} insignias={insignias.get(d.n.id)} />)
         )}

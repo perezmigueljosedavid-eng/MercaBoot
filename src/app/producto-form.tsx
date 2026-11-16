@@ -13,8 +13,12 @@ import {
 } from '../data/contenido';
 import type { CategoriaProducto, Etiqueta, TipoProducto } from '../data/tipos';
 import { clasificar, nombreIngrediente, perfilDeProducto } from '../ia/ingredientes';
+import { unidadConMedios } from '../lib/pedidos';
 import { useStore } from '../store';
+import { textoPrecio } from '../ui/bits';
 import { Confirmar } from '../ui/Dialogo';
+import { FotoCampo } from '../ui/FotoCampo';
+import { Icon } from '../ui/Icon';
 import { BackBtn, Btn, Card, Chip, Field, goBack, Screen, SelectField, Toggle } from '../ui/kit';
 import { T } from '../ui/T';
 import { C } from '../ui/theme';
@@ -77,6 +81,12 @@ export default function ProductoForm() {
   const [porEncargo, setPorEncargo] = useState(previo?.porEncargo ?? false);
   const [existencias, setExistencias] = useState(previo?.cantidad != null ? String(previo.cantidad) : '');
   const [categoria, setCategoria] = useState<CategoriaProducto>(previo?.categoria ?? categoriaInicial(giro));
+  const [descripcion, setDescripcion] = useState(previo?.descripcion ?? '');
+  const [caracteristicas, setCaracteristicas] = useState<string[]>(previo?.caracteristicas ?? []);
+  const [caracteristica, setCaracteristica] = useState('');
+  const [fotoUri, setFotoUri] = useState<string | undefined>(previo?.fotoUri);
+  // null = automático (kilos y litros en medios); true/false = lo decidió el comerciante.
+  const [medios, setMedios] = useState<boolean | null>(previo?.medios ?? null);
   const [etiquetas, setEtiquetas] = useState<Etiqueta[]>(perfilPrevio?.etiquetas ?? []);
   const [tocado, setTocado] = useState(!!previo?.etiquetas);
   const [error, setError] = useState('');
@@ -162,6 +172,8 @@ export default function ProductoForm() {
     const unidadFinal = unidad === UNIDAD_OTRA ? unidadOtra.trim() : unidad;
     if (!unidadFinal) return setError('Escribe cómo se vende, por ejemplo «charola» o «vaso de 1 litro».');
     const c = clasificar(nombre, giro, tipo);
+    // Si dejó una característica escrita sin tocar «Agregar», también se guarda.
+    const listaCar = [...caracteristicas, caracteristica.trim()].map((x) => x.trim()).filter(Boolean).slice(0, 6);
     const datos = {
       nombre,
       precio: monto,
@@ -174,6 +186,10 @@ export default function ProductoForm() {
       etiquetas,
       // Un platillo ya hecho no cuenta como ingrediente de las recetas (un pollo rostizado no es "pollo" para cocinar).
       ingrediente: tipo === 'ingrediente' ? c.ingrediente : undefined,
+      descripcion: descripcion.trim() || undefined,
+      caracteristicas: listaCar.length > 0 ? listaCar : undefined,
+      fotoUri,
+      medios: medios ?? undefined,
     };
     setGuardando(true);
     const err = previo ? await editarProducto(previo.id, datos) : await agregarProducto(datos);
@@ -190,6 +206,11 @@ export default function ProductoForm() {
       setTipoTocado(false);
       setDisponible(true);
       setPorEncargo(false);
+      setDescripcion('');
+      setCaracteristicas([]);
+      setCaracteristica('');
+      setFotoUri(undefined);
+      setMedios(null);
       return;
     }
     goBack('/comerciante/productos');
@@ -253,8 +274,39 @@ export default function ProductoForm() {
         </View>
 
         {unidad === UNIDAD_OTRA ? (
-          <Field label="¿Cómo se vende?" placeholder="Ej. charola, cazuela, vaso de 1 litro" value={unidadOtra} onChangeText={(t) => { setUnidadOtra(t); setError(''); }} />
+          <Field label="¿Cómo se vende?" placeholder="Ej. 1/2 litro, bolsa de 1/2 kg, charola, docena" value={unidadOtra} onChangeText={(t) => { setUnidadOtra(t); setError(''); }} />
         ) : null}
+
+        <View style={{ gap: 4, padding: 12, borderRadius: 12, backgroundColor: C.greenTint }}>
+          <T size={13} weight={700} color={C.greenDark}>
+            {(() => {
+              const u = (unidad === UNIDAD_OTRA ? unidadOtra.trim() : unidad) || 'unidad';
+              const monto = leerPrecio();
+              return monto != null && monto !== null ? `Tus clientes lo verán así: ${textoPrecio(monto, u)}` : `El precio que pongas es por cada «${u}».`;
+            })()}
+          </T>
+          <T size={12} lh={1.4} color={C.greenDark}>
+            Tú decides la cantidad que cobras: si vendes por medio litro, elige «{UNIDAD_OTRA}» y escribe «1/2 litro»; el precio será el de esa cantidad.
+          </T>
+        </View>
+
+        <Card style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingVertical: 14, paddingHorizontal: 16 }}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <T size={15} weight={700}>
+              Se puede pedir en medios
+            </T>
+            <T size={12} lh={1.4} color={C.muted}>
+              {(medios ?? unidadConMedios(unidad === UNIDAD_OTRA ? unidadOtra : unidad))
+                ? `Tus clientes podrán pedir ½, 1 ½, 2 ½… ${(unidad === UNIDAD_OTRA ? unidadOtra.trim() : unidad) || ''}`.trim() + '.'
+                : 'Tus clientes pedirán cantidades enteras: 1, 2, 3…'}
+            </T>
+          </View>
+          <Toggle
+            value={medios ?? unidadConMedios(unidad === UNIDAD_OTRA ? unidadOtra : unidad)}
+            onChange={(v) => setMedios(v)}
+            label="Se puede pedir en medios"
+          />
+        </Card>
 
         <View style={{ gap: 6 }}>
           <Field
@@ -299,6 +351,70 @@ export default function ProductoForm() {
             </T>
           </View>
           <Toggle value={disponible} onChange={setDisponible} label="Producto disponible" />
+        </Card>
+
+        <Card style={{ gap: 14, padding: 16 }}>
+          <View style={{ gap: 3 }}>
+            <T size={15} weight={700}>
+              Detalles para tus clientes (opcional)
+            </T>
+            <T size={12} lh={1.4} color={C.muted}>
+              Una foto, una descripción y sus características. El cliente las ve al tocar el producto, como en las tiendas en línea. Si no quieres, puedes dejarlo vacío.
+            </T>
+          </View>
+          <FotoCampo uri={fotoUri} nombre={nombre || 'P'} titulo="Foto del producto" onChange={setFotoUri} />
+          <Field
+            label="Descripción"
+            placeholder="Ej. Pierna y muslo de pollo fresco, ideal para caldos y guisados."
+            value={descripcion}
+            onChangeText={(t) => { setDescripcion(t); setError(''); }}
+            multiline
+            h={92}
+            maxLength={500}
+            autoCapitalize="sentences"
+          />
+          <View style={{ gap: 8 }}>
+            <T size={14} weight={600}>
+              Características importantes (hasta 6)
+            </T>
+            {caracteristicas.length > 0 ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {caracteristicas.map((c, i) => (
+                  <Pressable
+                    key={`${c}-${i}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Quitar «${c}»`}
+                    onPress={() => setCaracteristicas((p) => p.filter((_, j) => j !== i))}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 12, borderRadius: 18, backgroundColor: C.greenTint }}
+                  >
+                    <T size={13} weight={600} color={C.greenDark}>
+                      {c}
+                    </T>
+                    <Icon name="close" size={13} color={C.greenDark} />
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+            {caracteristicas.length < 6 ? (
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Field label="" gap={0} placeholder="Ej. Ideal para caldos" value={caracteristica} onChangeText={setCaracteristica} maxLength={60} autoCapitalize="sentences" />
+                </View>
+                <Btn
+                  label="Agregar"
+                  variant="outline"
+                  h={52}
+                  size={14}
+                  onPress={() => {
+                    const t = caracteristica.trim();
+                    if (!t) return;
+                    setCaracteristicas((p) => (p.length >= 6 || p.some((x) => x.toLowerCase() === t.toLowerCase()) ? p : [...p, t]));
+                    setCaracteristica('');
+                  }}
+                />
+              </View>
+            ) : null}
+          </View>
         </Card>
 
         <Card style={{ gap: 12, padding: 16 }}>

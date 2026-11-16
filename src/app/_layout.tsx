@@ -12,6 +12,7 @@ import { PlusJakartaSans_700Bold } from '@expo-google-fonts/plus-jakarta-sans/70
 import { PlusJakartaSans_800ExtraBold } from '@expo-google-fonts/plus-jakarta-sans/800ExtraBold';
 import { UbicacionProvider } from '../lib/ubicacion';
 import { StoreProvider, useStore } from '../store';
+import { Boti } from '../ui/Boti';
 import { T } from '../ui/T';
 import { C } from '../ui/theme';
 
@@ -90,9 +91,22 @@ function Raiz({ fuentesListas }: { fuentesListas: boolean }) {
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
       {sinInternet ? (
-        <View accessibilityRole="alert" style={{ paddingTop: insets.top + 6, paddingBottom: 8, paddingHorizontal: 16, backgroundColor: C.amberTint }}>
-          <T size={12} weight={600} lh={1.35} color={C.amberDeep} style={{ textAlign: 'center' }}>
-            Sin internet. Ves lo último que se guardó en este teléfono; para publicar o chatear necesitas conexión.
+        <View
+          accessibilityRole="alert"
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            paddingTop: insets.top + 4,
+            paddingBottom: 6,
+            paddingHorizontal: 16,
+            backgroundColor: C.amberTint,
+          }}
+        >
+          <Boti pose="dormido" size={40} />
+          <T size={12} weight={600} lh={1.35} color={C.amberDeep} style={{ flexShrink: 1, textAlign: 'center' }}>
+            Boti se quedó sin señal. Ves lo último que se guardó en este teléfono; para publicar o chatear necesitas conexión.
           </T>
         </View>
       ) : null}
