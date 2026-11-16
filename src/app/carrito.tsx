@@ -90,7 +90,7 @@ export default function Carrito() {
     const r = await crearPedido({ entrega, direccion, pago, nota });
     setEnviando(false);
     if ('error' in r) return setError(r.error);
-    decir('¡Pedido enviado! Te aviso cuando el negocio lo acepte.', { pose: 'fiesta', sonido: 'confeti', ms: 6000 });
+    decir('¡Pedido enviado! Te aviso cuando el negocio lo acepte.', { pose: 'fiesta', emocion: 'celebra', ms: 6000 });
     router.replace(`/pedido/${r.pedido.id}`);
   }
 

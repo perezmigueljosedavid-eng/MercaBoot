@@ -84,7 +84,7 @@ export default function Negocio() {
     const r = agregarAlCarrito(productoId);
     if (r === OTRO_NEGOCIO) setCambio(productoId);
     else if (r) setMensaje(r);
-    else decir('¡Anotado! Ya está en tu carrito.', { pose: 'caja', sonido: 'aviso', ms: 3500 });
+    else decir('¡Anotado! Ya está en tu carrito.', { pose: 'caja', emocion: 'brinco', ms: 3500 });
   };
   const disponibles = productos.filter((p) => p.disponible);
   const agotados = productos.filter((p) => !p.disponible);

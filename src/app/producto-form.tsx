@@ -208,10 +208,10 @@ export default function ProductoForm() {
       setCaracteristicas([]);
       setCaracteristica('');
       setFotoUri(undefined);
-      decir('¡Producto publicado! Tus clientes ya lo ven.', { pose: 'palma', sonido: 'aviso', ms: 4000 });
+      decir('¡Producto publicado! Tus clientes ya lo ven.', { pose: 'palma', emocion: 'celebra', ms: 4000 });
       return;
     }
-    decir(previo ? '¡Cambios guardados!' : '¡Producto publicado! Tus clientes ya lo ven.', { pose: 'palma', sonido: 'aviso', ms: 4000 });
+    decir(previo ? '¡Cambios guardados!' : '¡Producto publicado! Tus clientes ya lo ven.', { pose: 'palma', emocion: previo ? 'alegre' : 'celebra', ms: 4000 });
     goBack('/comerciante/productos');
   }
 

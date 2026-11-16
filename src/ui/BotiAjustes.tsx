@@ -46,7 +46,7 @@ export function BotiAjustes() {
         activa={ajustes.activo}
         onChange={(v) => {
           cambiar({ compania: v });
-          if (v) setTimeout(() => decir('¡Aquí estoy otra vez! Tócame si quieres una pista.', { pose: 'fiesta', sonido: 'hola' }), 400);
+          if (v) setTimeout(() => decir('¡Aquí estoy otra vez! Tócame si quieres una pista.', { pose: 'saludo', emocion: 'alegre' }), 400);
         }}
       />
       <Fila titulo="Sonidos suaves" texto="Un sonidito muy bajito cuando lo tocas o te avisa algo." valor={ajustes.sonidos} activa={ajustes.activo} onChange={(v) => cambiar({ sonidos: v })} />
