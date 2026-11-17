@@ -4,7 +4,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import type { Rol } from '../data/tipos';
 import type { AltaNegocio } from '../store';
 import { correoValido, telefonoValido, useStore } from '../store';
-import { BotiHola } from '../ui/BotiHola';
 import { BackBtn, Btn, Field, Screen } from '../ui/kit';
 import { ConfirmarReclamo, NegocioForm, useNegocioForm } from '../ui/NegocioForm';
 import { T } from '../ui/T';
@@ -68,7 +67,6 @@ export default function Registro() {
         <BackBtn />
       </View>
       <View style={{ flex: 1, gap: 16, paddingTop: 8, paddingHorizontal: 24, paddingBottom: 16 }}>
-        <BotiHola />
         <T size={28} weight={800} ls={-0.02}>
           Crea tu cuenta
         </T>
