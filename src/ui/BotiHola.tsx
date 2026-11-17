@@ -5,16 +5,9 @@ import { Boti, type DisparoEmocion } from './Boti';
 import { T } from './T';
 import { C } from './theme';
 
-/** Lo que dice Boti al tocarlo; la primera vez siempre es «Hi!». */
-const FRASES: { grande: string; chico: string }[] = [
-  { grande: '¡Hi!', chico: 'Soy Boti. Yo te ayudo a crear tu cuenta, ¡sin prisa!' },
-  { grande: '¡Hi otra vez!', chico: 'Llena tus datos y toca «Crear cuenta». ¡Tú puedes!' },
-  { grande: '¡Hihi!', chico: 'Me haces cosquillas. Tu contraseña es un secreto, ¡no se la cuentes a nadie!' },
-];
-
 /**
- * Boti diciendo «Hi» en la pantalla de crear cuenta: aparece con un brinquito, saluda con su sonido
- * y su globo de diálogo; si lo tocan, vuelve a saludar. Respeta los ajustes de Boti (si está apagado, se queda quieto y callado).
+ * Boti diciendo solo «Hi!» en la pantalla de crear cuenta: aparece con un brinquito, saluda con su sonido
+ * y su globito; si lo tocan, vuelve a decirlo. Respeta los ajustes de Boti (si está apagado, se queda quieto y callado).
  */
 export function BotiHola() {
   const { sonar } = useBoti();
@@ -38,7 +31,6 @@ export function BotiHola() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const frase = FRASES[turno % FRASES.length];
   const escala = pop.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] });
 
   return (
@@ -59,12 +51,9 @@ export function BotiHola() {
               borderRightColor: C.greenTint,
             }}
           />
-          <View style={{ flexShrink: 1, backgroundColor: C.greenTint, borderRadius: 18, borderTopLeftRadius: 6, paddingVertical: 10, paddingHorizontal: 14, gap: 2 }}>
-            <T size={22} weight={800} ls={-0.02} color={C.greenDark} accessibilityRole="header">
-              {frase.grande}
-            </T>
-            <T size={13} lh={1.4} color={C.greyText}>
-              {frase.chico}
+          <View style={{ flexShrink: 1, backgroundColor: C.greenTint, borderRadius: 18, borderTopLeftRadius: 6, paddingVertical: 8, paddingHorizontal: 18, gap: 0 }}>
+            <T size={26} weight={800} ls={-0.02} color={C.greenDark}>
+              Hi!
             </T>
           </View>
         </View>
