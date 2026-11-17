@@ -18,7 +18,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: build-apk
+  group: build-apk-voz
   cancel-in-progress: true
 
 defaults:
@@ -82,24 +82,24 @@ jobs:
 
       - name: Renombrar el APK
         id: apk
-        run: cp android/app/build/outputs/apk/release/app-release.apk Mercaboot-final.apk
+        run: cp android/app/build/outputs/apk/release/app-release.apk Mercaboot-voz.apk
 
       - name: Revisar el APK (firma, paquete y permisos)
         continue-on-error: true
         run: |
           BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
           {
-            ls -l Mercaboot-final.apk
+            ls -l Mercaboot-voz.apk
             echo "== apksigner =="
-            "$BT/apksigner" verify --verbose --print-certs Mercaboot-final.apk | head -12
+            "$BT/apksigner" verify --verbose --print-certs Mercaboot-voz.apk | head -12
             echo "== aapt2 =="
-            "$BT/aapt2" dump badging Mercaboot-final.apk | grep -E "^package|sdkVersion|targetSdkVersion|uses-permission|application-label:|native-code" || true
+            "$BT/aapt2" dump badging Mercaboot-voz.apk | grep -E "^package|sdkVersion|targetSdkVersion|uses-permission|application-label:|native-code" || true
           } 2>&1 | tee info-apk.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.nube.outputs.lista == 'true' && 'Mercaboot-final-apk' || 'Mercaboot-final-PRUEBA-sin-base-de-datos-apk' }}
-          path: Mercaboot-final.apk
+          name: ${{ steps.nube.outputs.lista == 'true' && 'Mercaboot-voz-apk' || 'Mercaboot-voz-PRUEBA-sin-base-de-datos-apk' }}
+          path: Mercaboot-voz.apk
 
       - name: Publicar el APK en Releases
         id: release
@@ -107,11 +107,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete final-apk --cleanup-tag --yes || true
-          gh release create final-apk Mercaboot-final.apk \
+          gh release delete voz-apk --cleanup-tag --yes || true
+          gh release create voz-apk Mercaboot-voz.apk \
             --target "${{ github.sha }}" \
-            --title "Mercaboot · Versión final 4.0 (Android)" \
-            --notes "APK de la VERSIÓN FINAL de Mercaboot (v4.0): todo lo de los avances en una sola app. Base de datos en la nube con tiempo real, ubicación, chat, carrito y pedidos apartados (paso a recogerlo o a domicilio, pago en persona o por transferencia), clientes frecuentes que elige el comerciante, reseñas con estrellas, avisos y promociones del comerciante, «lo más barato hoy», asistente «Ideas para cocinar» y fiestas. Descárgalo desde un celular Android y ábrelo para instalar; necesita internet. Si ya tenías un avance instalado, instálalo encima; si Android no lo permite, desinstala el anterior primero (tus datos están en la nube, no en el teléfono). Si Android avisa que bloquea la instalación, permite instalar apps desde esta fuente (Configuración → Instalar apps desconocidas). Si aparece Play Protect, toca Instalar de todos modos. Para iPhone usa la versión web instalable (ver LEEME). Corrida #${{ github.run_number }}, commit ${{ github.sha }}."
+            --title "Mercaboot Voz · Boti habla (Android, versión aparte)" \
+            --notes "VERSIÓN APARTE de Mercaboot con la voz de Boti: en la pantalla de bienvenida Boti dice el saludo en voz alta. Se instala como otra app («Mercaboot Voz») y no reemplaza a la versión final; usa la misma base de datos. Lo demás es igual a la versión final 4.3 (v4.0): todo lo de los avances en una sola app. Base de datos en la nube con tiempo real, ubicación, chat, carrito y pedidos apartados (paso a recogerlo o a domicilio, pago en persona o por transferencia), clientes frecuentes que elige el comerciante, reseñas con estrellas, avisos y promociones del comerciante, «lo más barato hoy», asistente «Ideas para cocinar» y fiestas. Descárgalo desde un celular Android y ábrelo para instalar; necesita internet. Si ya tenías un avance instalado, instálalo encima; si Android no lo permite, desinstala el anterior primero (tus datos están en la nube, no en el teléfono). Si Android avisa que bloquea la instalación, permite instalar apps desde esta fuente (Configuración → Instalar apps desconocidas). Si aparece Play Protect, toca Instalar de todos modos. Para iPhone usa la versión web instalable (ver LEEME). Corrida #${{ github.run_number }}, commit ${{ github.sha }}."
 
       - name: Guardar cómo terminó la corrida (rama «build-log»)
         if: always()
@@ -145,9 +145,9 @@ jobs:
             grep -n -B2 -A14 -E "FAILURE: Build failed|What went wrong|^e: |error TS|npm error|ERR!|Error:" build.log | head -n 400 > "$d/errores.txt" || true
           fi
           cd "$d"
-          git init -q -b build-log
+          git init -q -b build-log-voz
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -q -m "Corrida #${{ github.run_number }}: $RESULTADO"
-          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:refs/heads/build-log
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:refs/heads/build-log-voz
