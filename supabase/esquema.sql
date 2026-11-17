@@ -1894,7 +1894,9 @@ begin
 end $$;
 
 -- La función es interna: la app no la llama directamente.
-revoke all on function public.lista_de_textos_cortos(text[], integer, integer) from public, anon, authenticated;
+-- La regla CHECK de productos la llama con los permisos de quien guarda: debe poder ejecutarla (es una función pura).
+revoke all on function public.lista_de_textos_cortos(text[], integer, integer) from public, anon;
+grant execute on function public.lista_de_textos_cortos(text[], integer, integer) to authenticated;
 
 -- El comerciante puede guardar estos campos desde la app (solo en sus productos, por las políticas de siempre).
 grant insert (descripcion, caracteristicas, foto_uri, medios) on public.productos to authenticated;
