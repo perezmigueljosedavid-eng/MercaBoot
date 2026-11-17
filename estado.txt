@@ -1,0 +1,8 @@
+resultado: success
+avance: final-4.0
+corrida: 11
+commit: fb0449da932926fec991516ee32a140c33d6fdbe
+rama: version-voz
+fecha: 2026-11-17T02:13:26Z
+config-lista: true
+pasos: nube=success instalar=success iconos=success tipos=success prebuild=success gradle=success apk=success release=success
