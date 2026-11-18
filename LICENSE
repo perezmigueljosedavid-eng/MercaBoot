@@ -1,21 +1,34 @@
-The MIT License (MIT)
+MERCABOOT — AVISO DE DERECHOS DE AUTOR Y LICENCIA
+=================================================
 
-Copyright (c) 2015-present 650 Industries, Inc. (aka Expo)
+Obra: Mercaboot (aplicación para Android, iPhone y navegador), versión final 4.3, con todos sus
+elementos: código fuente y objeto, interfaz y pantallas, diseño de la base de datos y sus archivos SQL,
+el personaje «Boti» (dibujos, poses, emociones y animaciones), el logotipo, el título «Mercaboot»,
+los sonidos, los textos, las recetas y el contenido del asistente de cocina, y la documentación.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Autoría:
+  - Autor principal: José David Pérez Miguel
+  - Segunda autora: Izebel Altamirano Carreño
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+Titular de los derechos de autor (patrimoniales y morales que la ley le reconoce):
+  José David Pérez Miguel
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Copyright (c) 2026 José David Pérez Miguel. TODOS LOS DERECHOS RESERVADOS.
+
+Que este código esté visible en GitHub NO es una licencia de uso. Sin permiso escrito del titular
+no se puede copiar, modificar, distribuir, publicar, vender ni usar esta obra, ni sus partes,
+ni usar el nombre «Mercaboot», el logotipo o el personaje «Boti» para otros productos o servicios.
+
+Excepciones:
+  - Las piezas de terceros (Expo, React Native, Supabase, fuentes y otros paquetes) conservan sus propias
+    licencias y autores; ver THIRD-PARTY-LICENSES.md.
+  - GitHub permite ver y bifurcar (fork) repositorios públicos según sus Condiciones de servicio; eso no
+    da más derechos que los descritos allí.
+
+Contacto para permisos: a través del perfil de GitHub «perezmigueljosedavid-eng».
+
+---------------------------------------------------------------------------------------------
+English summary: Mercaboot (v4.3, all elements: source code, UI, database design, the "Boti"
+character, logo, title, sounds, texts and documentation) is Copyright (c) 2026 José David Pérez
+Miguel (principal author; second author: Izebel Altamirano Carreño). All rights reserved. Third-party
+components keep their own licenses (see THIRD-PARTY-LICENSES.md).

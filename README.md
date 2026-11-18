@@ -57,3 +57,9 @@ Por ejemplo, si una receta necesita pollo, tortillas y quesillo, la aplicación 
 
 También se contempla que la IA pueda recomendar establecimientos que ya tengan comida preparada relacionada con lo que el usuario está buscando.
 
+
+## ©️ Autoría y derechos de autor
+
+**Mercaboot** (aplicación, código, diseño de la interfaz, base de datos, personaje «Boti», logotipo, título, sonidos, textos y documentación) es obra de **José David Pérez Miguel** (autor principal) e **Izebel Altamirano Carreño** (segunda autora).
+
+Copyright © 2026 José David Pérez Miguel. **Todos los derechos reservados.** Ver el archivo [`LICENSE`](LICENSE). Las piezas de terceros conservan sus licencias: ver [`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md).
