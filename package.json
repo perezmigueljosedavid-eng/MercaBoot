@@ -1,5 +1,7 @@
 {
   "name": "mercaboot",
+  "author": "José David Pérez Miguel; Izebel Altamirano Carreño",
+  "license": "UNLICENSED",
   "version": "4.0.0",
   "main": "expo-router/entry",
   "dependencies": {
