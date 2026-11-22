@@ -14,6 +14,8 @@ import {
 import type { CategoriaProducto, Etiqueta, TipoProducto } from '../data/tipos';
 import { clasificar, nombreIngrediente, perfilDeProducto } from '../ia/ingredientes';
 import { useBoti } from '../lib/boti';
+import { codigoParaBuscar } from '../lib/codigoBarras';
+import { recordarCodigo } from '../lib/catalogoDeCodigos';
 import { useFotoProducto } from '../lib/fotos';
 import { useStore } from '../store';
 import { textoPrecio } from '../ui/bits';
@@ -62,7 +64,7 @@ function Opcion({ titulo, texto, activa, onPress }: { titulo: string; texto: str
  * El comerciante escribe lo que quiere; la app deduce el tipo, la categoría y las características, y él puede corregirlas.
  */
 export default function ProductoForm() {
-  const { id, nombre: nombreSugerido } = useLocalSearchParams<{ id?: string; nombre?: string }>();
+  const { id, nombre: nombreSugerido, codigo: codigoDeBarras, unidad: unidadDeLaApp } = useLocalSearchParams<{ id?: string; nombre?: string; codigo?: string; unidad?: string }>();
   const { s, negocio, agregarProducto, editarProducto, eliminarProducto } = useStore();
   const { decir } = useBoti();
   const giro = negocio?.giro;
@@ -70,18 +72,24 @@ export default function ProductoForm() {
   const perfilPrevio = useMemo(() => (previo ? perfilDeProducto(previo, giro) : null), [previo, giro]);
 
   // Al venir de «lo que buscan y nadie tiene» el nombre ya viene escrito (con la primera letra en mayúscula) y lo demás se deduce de él
-  const sugerido = !id && typeof nombreSugerido === 'string' ? nombreSugerido.slice(0, 60).replace(/^./, (c) => c.toUpperCase()) : '';
+  const sugerido = !id && typeof nombreSugerido === 'string' ? nombreSugerido.slice(0, 120).replace(/^./, (c) => c.toUpperCase()) : '';
+  // Al venir del escáner trae el código de barras (se recuerda con el nombre que quede) y la unidad con que se vende lo empaquetado
+  const unidadSugerida = !id && typeof unidadDeLaApp === 'string' ? unidadDeLaApp : '';
+  const [codigoPendiente, setCodigoPendiente] = useState<string | null>(() => (!id && typeof codigoDeBarras === 'string' ? codigoParaBuscar(codigoDeBarras) : null));
   const clasSugerida = useMemo(() => (sugerido ? clasificar(sugerido, giro) : null), [sugerido, giro]);
   const [nombre, setNombre] = useState(previo?.nombre ?? sugerido);
   const [precio, setPrecio] = useState(previo?.precio != null ? String(previo.precio) : '');
   const [tipo, setTipo] = useState<TipoProducto>(perfilPrevio?.tipo ?? clasSugerida?.tipo ?? clasificar('', giro).tipo);
   const [tipoTocado, setTipoTocado] = useState(!!previo?.tipo);
   const [unidad, setUnidad] = useState(() => {
-    if (!previo) return unidadInicial(giro, clasSugerida?.tipo ?? clasificar('', giro).tipo);
+    if (!previo) {
+      const t = clasSugerida?.tipo ?? clasificar('', giro).tipo;
+      return unidadSugerida && unidadesPara(giro, t).includes(unidadSugerida) ? unidadSugerida : unidadInicial(giro, t);
+    }
     return unidadesPara(giro, perfilPrevio?.tipo).includes(previo.unidad) ? previo.unidad : UNIDAD_OTRA;
   });
   const [unidadOtra, setUnidadOtra] = useState(previo && !unidadesPara(giro, perfilPrevio?.tipo).includes(previo.unidad) ? previo.unidad : '');
-  const [unidadTocada, setUnidadTocada] = useState(!!previo);
+  const [unidadTocada, setUnidadTocada] = useState(!!previo || !!unidadSugerida);
   const [disponible, setDisponible] = useState(previo?.disponible ?? true);
   const [porEncargo, setPorEncargo] = useState(previo?.porEncargo ?? false);
   const [existencias, setExistencias] = useState(previo?.cantidad != null ? String(previo.cantidad) : '');
@@ -201,6 +209,11 @@ export default function ProductoForm() {
     const err = previo ? await editarProducto(previo.id, datos) : await agregarProducto(datos);
     setGuardando(false);
     if (err) return setError(err);
+    // Si venía de escanear un código, se recuerda con el nombre que quedó (no cambia lo que ya se sabía de ese código)
+    if (!previo && codigoPendiente) {
+      void recordarCodigo(codigoPendiente, { nombre: nombre.trim() });
+      setCodigoPendiente(null);
+    }
     if (otro && !previo) {
       setAviso(`Guardamos «${nombre.trim()}». Escribe el siguiente producto.`);
       setNombre('');

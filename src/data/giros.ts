@@ -3,6 +3,8 @@
  * Es código puro (sin pantallas) porque también lo usa el asistente.
  */
 
+import type { CategoriaProducto } from './tipos';
+
 export type GrupoGiro = 'frescos' | 'preparados' | 'postres' | 'bebidas' | 'otros';
 
 const sinAcentos = (s: string) =>
@@ -65,3 +67,8 @@ export function unidadesPara(giro?: string, tipo?: 'ingrediente' | 'preparado'):
 
 /** Unidad con la que empieza el formulario de un producto nuevo. */
 export const unidadInicial = (giro?: string, tipo?: 'ingrediente' | 'preparado') => POR_GRUPO[grupoDeUnidades(giro, tipo)][0];
+
+/** Unidad de un producto que se agrega sin decir cómo se vende (importar desde Excel): lo que se pesa, por kilo; lo demás, por pieza. */
+export function unidadPorOmision(categoria?: CategoriaProducto): string {
+  return categoria === 'fruta' || categoria === 'verdura' || categoria === 'carne' || categoria === 'ave' || categoria === 'pescado' ? 'kg' : 'pieza';
+}

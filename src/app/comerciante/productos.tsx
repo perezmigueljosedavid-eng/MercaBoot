@@ -93,6 +93,8 @@ export default function MisProductos() {
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
         {propios.length > 0 ? <Herramienta icono="tag" titulo="Precios de hoy" texto="Cambia muchos precios o marca lo que se acabó, todo en una pantalla." ruta="/precios-de-hoy" /> : null}
         <Herramienta icono="box" titulo="Catálogo Mercaboot" texto="Elige de una lista lo que vendes y se agrega de golpe, sin escribir uno por uno." ruta="/catalogo" />
+        <Herramienta icono="upload" titulo="Importar de Excel" texto="Sube tu lista de Excel o Google Sheets, o baja la tuya para cambiar precios." ruta="/importar-productos" />
+        <Herramienta icono="scan" titulo="Escanear código" texto="Apunta la cámara al código de barras de un producto y se escribe el nombre solo." ruta="/escanear" />
         <Herramienta icono="clock" titulo="Horario" texto="Pon tus horas una vez y la app abre y cierra tu negocio sola." ruta="/horario" />
       </View>
 
@@ -127,7 +129,7 @@ export default function MisProductos() {
             Aún no has publicado productos
           </T>
           <T size={14} lh={1.45} color={C.muted}>
-            Puedes escribir cada cosa que vendes (por ejemplo «Quesillo», «Fresas con crema» o «Comida corrida»), o usar el «Catálogo Mercaboot» de arriba para agregar de golpe lo más común de tu tipo de negocio. Después solo ajustas los precios y marcas si hay o ya se acabó. Los clientes y el asistente lo verán al momento.
+            Puedes escribir cada cosa que vendes (por ejemplo «Quesillo», «Fresas con crema» o «Comida corrida»), usar el «Catálogo Mercaboot» de arriba para agregar de golpe lo más común de tu tipo de negocio, o «Importar de Excel» si ya tienes tu lista en una hoja de cálculo. Después solo ajustas los precios y marcas si hay o ya se acabó. Los clientes y el asistente lo verán al momento.
           </T>
         </Card>
       ) : lista.length === 0 ? (

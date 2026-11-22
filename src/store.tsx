@@ -25,6 +25,7 @@ import type {
   TipoAviso,
   TipoProducto,
 } from './data/tipos';
+import { unidadPorOmision } from './data/giros';
 import { clasificar } from './ia/ingredientes';
 import {
   avisoDeFila,
@@ -60,6 +61,7 @@ import { olvidarAlertas } from './lib/alertas';
 import { avisarAlOtro, quitarDispositivoDeEstaCuenta } from './lib/avisosTelefono';
 import { avisarDeProductos } from './lib/avisosDeProductos';
 import { olvidarBusquedas } from './lib/busquedas';
+import { olvidarCodigos } from './lib/catalogoDeCodigos';
 import { guardarFoto, quitarFoto, vaciarFotos } from './lib/fotos';
 import { sinHorario, semanaValida, textoHorario } from './lib/horario';
 import { avisoDeCambio, cantidadTexto, disponibleParaPedir, esActivo, pasoCantidad, redondear, totales } from './lib/pedidos';
@@ -1023,6 +1025,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         propias.current.clear();
         olvidarAlertas();
         olvidarBusquedas();
+        olvidarCodigos();
         setModo(null);
         setEstadoRed('conectando');
         setLocalListo(true);
@@ -1686,7 +1689,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return {
           nombre: p.nombre,
           precio: p.precio ?? null,
-          unidad: p.unidad,
+          // Sin unidad (p. ej. un archivo de Excel que no la trae): lo que se pesa va por kilo y lo demás por pieza
+          unidad: p.unidad ?? unidadPorOmision(p.categoria ?? c.categoria),
           categoria: p.categoria ?? c.categoria,
           disponible: p.disponible ?? true,
           tipo: p.tipo ?? c.tipo,
