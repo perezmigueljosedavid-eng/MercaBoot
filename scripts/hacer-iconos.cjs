@@ -49,6 +49,10 @@ async function main() {
     await (nombre === 'icon.png' ? imagen.flatten({ background: VERDE }) : imagen).png().toFile(destino);
     console.log('listo:', destino);
   }
+  // Ícono de los avisos al teléfono (Android): solo la silueta en blanco y fondo transparente, de 96 × 96.
+  const aviso = path.join(carpeta, 'notification-icon.png');
+  await sharp(Buffer.from(lienzo(glifo(BLANCO, 820, 1.9)))).resize(96, 96).png().toFile(aviso);
+  console.log('listo:', aviso);
   // Ícono de la versión web: el ícono principal en 256 × 256.
   const favicon = path.join(carpeta, 'favicon.png');
   await sharp(path.join(carpeta, 'icon.png')).resize(256, 256).flatten({ background: VERDE }).png().toFile(favicon);

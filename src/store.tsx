@@ -56,6 +56,7 @@ import {
   type FilaProducto,
   type FilaResena,
 } from './lib/nube';
+import { avisarAlOtro, quitarDispositivoDeEstaCuenta } from './lib/avisosTelefono';
 import { guardarFoto, quitarFoto, vaciarFotos } from './lib/fotos';
 import { sinHorario, semanaValida, textoHorario } from './lib/horario';
 import { avisoDeCambio, cantidadTexto, disponibleParaPedir, esActivo, pasoCantidad, redondear, totales } from './lib/pedidos';
@@ -1347,6 +1348,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   const salir = useCallback<Ctx['salir']>(async () => {
+    // Antes de cerrar la sesión, este teléfono deja de recibir los avisos de esta cuenta (se necesita la sesión abierta)
+    await quitarDispositivoDeEstaCuenta();
     try {
       await supabase.auth.signOut({ scope: 'local' });
     } catch {
@@ -1726,12 +1729,24 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     });
     if (error) return textoError(error);
     if (typeof data === 'string' && data) return data;
+    const conocidos = new Set(baseRef.current.avisos.filter((x) => x.negocioId === mio.id).map((x) => x.id));
     // El aviso (y, si hace falta, el producto que se agotó o llegó) se leen de nuevo para verlos de inmediato.
     const [avs, prod] = await Promise.all([
       supabase.from('avisos').select('*').eq('negocio_id', mio.id),
       a.productoId ? conColumnas((cols) => supabase.from('productos').select(cols).eq('id', a.productoId as string).maybeSingle()) : Promise.resolve(null),
     ]);
-    if (!avs.error && avs.data) dispatch({ t: 'avisosDe', negocioId: mio.id, avisos: (avs.data as FilaAviso[]).map(avisoDeFila) });
+    if (!avs.error && avs.data) {
+      const filas = avs.data as FilaAviso[];
+      dispatch({ t: 'avisosDe', negocioId: mio.id, avisos: filas.map(avisoDeFila) });
+      // Los avisos de «se agotó» y «cerrado» son del día a día y no mandan aviso al teléfono; el resto sí (promoción, regalo, «hay», general)
+      if (a.tipo !== 'agotado' && a.tipo !== 'cerrado') {
+        const nuevos = filas
+          .filter((f) => f.tipo === a.tipo && !conocidos.has(f.id))
+          .sort((x, y) => (x.creado < y.creado ? 1 : x.creado > y.creado ? -1 : 0));
+        const nuevo = nuevos.find((f) => f.texto === texto) ?? nuevos[0];
+        if (nuevo) avisarAlOtro('aviso', nuevo.id);
+      }
+    }
     if (prod && !prod.error && prod.data) dispatch({ t: 'prod', p: productoDeFila(prod.data as FilaProducto) });
     return null;
   }, []);
@@ -1831,7 +1846,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         dispatch({ t: 'msgDel', conv, id: tmp.id });
         return textoError(error);
       }
-      dispatch({ t: 'msg', m: mensajeDeFila(data as FilaMensaje) });
+      const enviado = mensajeDeFila(data as FilaMensaje);
+      dispatch({ t: 'msg', m: enviado });
+      avisarAlOtro('mensaje', enviado.id); // el teléfono de la otra persona recibe el aviso (si activó los avisos)
       return null;
     },
     [],
@@ -1958,6 +1975,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       dispatch({ t: 'ped', p: pedido });
       if (carroRef.current?.uid === id) fijarCarro(null);
       refrescar(); // trae el chat y las existencias ya apartadas
+      avisarAlOtro('pedido', pedido.id); // el comerciante recibe «pedido nuevo» en su teléfono
       return { pedido };
     },
     [fijarCarro, refrescar],
@@ -1975,6 +1993,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
       dispatch({ t: 'ped', p: pedidoDeFila(data as FilaPedido) });
       refrescar(); // trae el aviso del chat y las existencias
+      avisarAlOtro('pedido', pedidoId); // la otra parte se entera del cambio (aceptado, listo, cancelado…)
       return null;
     },
     [refrescar],

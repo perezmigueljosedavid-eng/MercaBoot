@@ -13,6 +13,7 @@ import { PlusJakartaSans_800ExtraBold } from '@expo-google-fonts/plus-jakarta-sa
 import { BotiProvider } from '../lib/boti';
 import { UbicacionProvider } from '../lib/ubicacion';
 import { StoreProvider, useStore } from '../store';
+import { AvisosAlTelefono } from '../ui/AvisosAlTelefono';
 import { Boti } from '../ui/Boti';
 import { BotiCompania } from '../ui/BotiCompania';
 import { T } from '../ui/T';
@@ -123,6 +124,7 @@ function Raiz({ fuentesListas }: { fuentesListas: boolean }) {
         />
       </SafeAreaInsetsContext.Provider>
       <BotiCompania />
+      <AvisosAlTelefono />
       <Aviso texto={aviso} />
     </View>
   );
