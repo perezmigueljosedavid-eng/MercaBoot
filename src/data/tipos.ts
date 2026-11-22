@@ -94,6 +94,11 @@ export interface Negocio {
   aceptaPedidos: boolean;
   /** ¿Acepta pago por transferencia? (los datos para pagar son privados y solo llegan con un pedido aceptado). */
   aceptaTransferencia: boolean;
+  /**
+   * ¿También cobra con tarjeta mediante su propio «link de pago»? Lo prende la base de datos sola cuando el negocio guarda su link
+   * (el link en sí es privado y solo llega al cliente de un pedido aceptado). Puede faltar en copias de versiones anteriores.
+   */
+  aceptaTarjeta?: boolean;
   creado: number;
 }
 

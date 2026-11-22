@@ -33,6 +33,7 @@ import {
   conversacionDeFila,
   esColumnaFaltante,
   esErrorDeRed,
+  faltaEnLaBase,
   favoritoDeFila,
   filaDeCambioNegocio,
   frecuenteDeFila,
@@ -64,6 +65,7 @@ import { olvidarBusquedas } from './lib/busquedas';
 import { olvidarCodigos } from './lib/catalogoDeCodigos';
 import { guardarFoto, quitarFoto, vaciarFotos } from './lib/fotos';
 import { sinHorario, semanaValida, textoHorario } from './lib/horario';
+import { MAX_LINK } from './lib/pagos';
 import { avisoDeCambio, cantidadTexto, disponibleParaPedir, esActivo, pasoCantidad, redondear, totales } from './lib/pedidos';
 import { trocear, type CambioDeProducto } from './lib/precios';
 import { olvidarBloqueos } from './lib/seguridad';
@@ -624,6 +626,16 @@ interface Ctx {
   /** El comerciante lee sus datos para recibir transferencias (`null` si no se pudieron leer). */
   leerDatosPago: () => Promise<string | null>;
   guardarDatosPago: (texto: string) => Promise<string | null>;
+  /** El link para pagar con tarjeta de un pedido: solo lo recibe el cliente de ese pedido, cuando el negocio ya lo aceptó. */
+  linkPagoDe: (pedidoId: string) => Promise<string | null>;
+  /** El comerciante lee su link de pago (`''` si no tiene; `null` si no se pudo leer o la base de datos aún no lo tiene). */
+  leerLinkPago: () => Promise<string | null>;
+  /** Guarda (o, con `null`, quita) el link de pago ya revisado con `normalizarLinkDePago`. Devuelve el motivo si no se pudo. */
+  guardarLinkPago: (url: string | null) => Promise<string | null>;
+  /** El comerciante pega (o, con `null`, quita) el link de pago de UN pedido, creado por el total exacto. Devuelve el motivo si no se pudo. */
+  ponerLinkPedido: (pedidoId: string, url: string | null) => Promise<string | null>;
+  /** El link que el comerciante ya puso en un pedido suyo (`null` si no hay o no se pudo leer). */
+  miLinkPedido: (pedidoId: string) => Promise<string | null>;
   /** El comerciante nombra (o cambia) a un cliente frecuente: descuento de 0 a 50 % y/o un beneficio. */
   marcarFrecuente: (clienteId: string, descuentoPct: number, beneficio?: string) => Promise<string | null>;
   quitarFrecuente: (clienteId: string) => Promise<string | null>;
@@ -2081,6 +2093,59 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return 'No se pudieron guardar los datos de pago. Inténtalo otra vez.';
   }, []);
 
+  const linkPagoDe = useCallback<Ctx['linkPagoDe']>(async (pedidoId) => {
+    const { data, error } = await supabase.rpc('link_pago_pedido', { p_pedido: pedidoId });
+    if (error) return null;
+    return (data as string | null) ?? null;
+  }, []);
+
+  const leerLinkPago = useCallback<Ctx['leerLinkPago']>(async () => {
+    const mio = miNegocio();
+    if (!mio) return null;
+    const { data, error } = await supabase.from('negocios_privado').select('link_pago').eq('negocio_id', mio.id).maybeSingle();
+    if (error) return null; // también si la base de datos todavía no tiene la columna: la pantalla lo avisa
+    return (data as { link_pago: string | null } | null)?.link_pago ?? '';
+  }, []);
+
+  const guardarLinkPago = useCallback<Ctx['guardarLinkPago']>(async (url) => {
+    const mio = miNegocio();
+    if (!mio) return 'Tu cuenta no administra ningún negocio.';
+    const valor = url?.trim() || null;
+    if (valor && valor.length > MAX_LINK) return `El link es muy largo (máximo ${MAX_LINK} letras).`;
+    const motivo = (e: unknown) => (faltaEnLaBase(e) ? 'El cobro con tarjeta todavía no está disponible. Actualiza la app e inténtalo más tarde.' : textoError(e));
+    // Igual que los datos de pago: primero se cambia la fila que ya existe y, si todavía no hay, se crea.
+    for (let intento = 0; intento < 2; intento++) {
+      const { data, error } = await supabase.from('negocios_privado').update({ link_pago: valor }).eq('negocio_id', mio.id).select('negocio_id');
+      if (error) return motivo(error);
+      if (data && data.length > 0) return null;
+      const { error: e2 } = await supabase.from('negocios_privado').insert({ negocio_id: mio.id, link_pago: valor });
+      if (!e2) return null;
+      if (e2.code !== '23505') return motivo(e2);
+    }
+    return 'No se pudo guardar el link de pago. Inténtalo otra vez.';
+  }, []);
+
+  const ponerLinkPedido = useCallback<Ctx['ponerLinkPedido']>(
+    async (pedidoId, url) => {
+      if (!uidRef.current) return 'No hay una sesión activa.';
+      const valor = url?.trim() || '';
+      if (valor.length > MAX_LINK) return `El link es muy largo (máximo ${MAX_LINK} letras).`;
+      const { error } = await supabase.rpc('poner_link_pedido', { p_pedido: pedidoId, p_link: valor });
+      if (error) {
+        refrescar(); // quizá el pedido ya cambió (el cliente avisó su pago, lo cancelaron…)
+        return faltaEnLaBase(error) ? 'El cobro con tarjeta todavía no está disponible. Actualiza la app e inténtalo más tarde.' : textoError(error);
+      }
+      return null;
+    },
+    [refrescar],
+  );
+
+  const miLinkPedido = useCallback<Ctx['miLinkPedido']>(async (pedidoId) => {
+    const { data, error } = await supabase.rpc('mi_link_pedido', { p_pedido: pedidoId });
+    if (error) return null;
+    return (data as string | null) ?? null;
+  }, []);
+
   /* ───── clientes frecuentes ───── */
 
   const marcarFrecuente = useCallback<Ctx['marcarFrecuente']>(
@@ -2171,6 +2236,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       datosPagoDe,
       leerDatosPago,
       guardarDatosPago,
+      linkPagoDe,
+      leerLinkPago,
+      guardarLinkPago,
+      ponerLinkPedido,
+      miLinkPedido,
       marcarFrecuente,
       quitarFrecuente,
     }),
@@ -2179,7 +2249,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       entrar, salir, cambiarModo, comprobarReclamo, abrirNegocio, soltarNegocio, recuperarPassword, restablecerPassword, actualizarCuenta,
       cambiarPassword, actualizarNegocio, toggleFavorito, agregarProducto, editarProducto, eliminarProducto, setDisponible, actualizarProductosLote, agregarProductosLote, guardarHorario, publicarAviso, quitarAviso, agregarResena, borrarResena, mensajesDe,
       observarChat, enviarComoCliente, enviarComoNegocio, marcarLeida, carrito, agregarAlCarrito, ponerCantidad, quitarDelCarrito, vaciarCarrito,
-      crearPedido, accionPedido, lineasDe, datosPagoDe, leerDatosPago, guardarDatosPago, marcarFrecuente, quitarFrecuente,
+      crearPedido, accionPedido, lineasDe, datosPagoDe, leerDatosPago, guardarDatosPago, linkPagoDe, leerLinkPago, guardarLinkPago, ponerLinkPedido, miLinkPedido, marcarFrecuente, quitarFrecuente,
     ],
   );
 

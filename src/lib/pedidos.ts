@@ -1,5 +1,6 @@
 import type { EstadoPedido, Pedido, Producto } from '../data/tipos';
 import type { Tono } from '../ui/theme';
+import { esReferenciaDeTarjeta } from './pagos';
 
 /**
  * Reglas y textos de los pedidos (carrito y apartado). Es código puro: no usa pantallas ni la nube.
@@ -97,15 +98,24 @@ export function etiquetaEstado(p: Pick<Pedido, 'estado' | 'entrega'>): { label: 
   }
 }
 
-/** Cómo se paga, dicho para quien lo lee (el cliente paga; el comerciante cobra). */
-export function textoPago(p: Pick<Pedido, 'pago' | 'pagoEstado' | 'entrega'>, quien: 'cliente' | 'comerciante'): string {
+/**
+ * Cómo se paga, dicho para quien lo lee (el cliente paga; el comerciante cobra). Todo pago por adelantado se llama «transferencia»
+ * en la base de datos; aquí se dice «tarjeta» cuando el cliente avisó que pagó con el link de pago del negocio, y «transferencia o
+ * tarjeta» mientras el pedido espera el pago y el negocio ofrece las dos (`aceptaTarjeta`).
+ */
+export function textoPago(
+  p: Pick<Pedido, 'pago' | 'pagoEstado' | 'entrega'> & { referenciaPago?: string },
+  quien: 'cliente' | 'comerciante',
+  aceptaTarjeta = false,
+): string {
   if (p.pago === 'en_persona') {
     const donde = p.entrega === 'domicilio' ? 'al recibir' : 'al recoger';
     return quien === 'cliente' ? `Pagas en persona, ${donde}` : `Cobras en persona, ${donde}`;
   }
-  if (p.pagoEstado === 'confirmado') return 'Transferencia · pago confirmado';
-  if (p.pagoEstado === 'reportado') return quien === 'cliente' ? 'Transferencia · avisaste tu pago' : 'Transferencia · el cliente avisó su pago';
-  return 'Transferencia · falta pagar';
+  const medio = esReferenciaDeTarjeta(p.referenciaPago) ? 'Tarjeta' : p.pagoEstado === 'por_pagar' && aceptaTarjeta ? 'Transferencia o tarjeta' : 'Transferencia';
+  if (p.pagoEstado === 'confirmado') return `${medio} · pago confirmado`;
+  if (p.pagoEstado === 'reportado') return `${medio} · ${quien === 'cliente' ? 'avisaste tu pago' : 'el cliente avisó su pago'}`;
+  return `${medio} · falta pagar`;
 }
 
 /** «25 min», «1 h 05 min», «2 d 3 h» */

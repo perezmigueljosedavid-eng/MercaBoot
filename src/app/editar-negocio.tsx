@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
+import { avisoDeDatosDePago, MAX_LINK, normalizarLinkDePago, proveedorDeLink, sitioDeLink, TEXTO_SOLO_TARJETA } from '../lib/pagos';
 import { minutosEnPalabras, OPCIONES_APARTADO } from '../lib/pedidos';
 import { correoValido, telefonoValido, useStore } from '../store';
 import { FotoCampo } from '../ui/FotoCampo';
@@ -12,7 +13,7 @@ import { C } from '../ui/theme';
 
 /** Todo lo que el comerciante puede cambiar de su negocio. */
 export default function EditarNegocio() {
-  const { negocio, actualizarNegocio, leerDatosPago, guardarDatosPago } = useStore();
+  const { negocio, actualizarNegocio, leerDatosPago, guardarDatosPago, leerLinkPago, guardarLinkPago } = useStore();
   const [logo, setLogo] = useState<string | undefined>(negocio?.logoUri);
   const [nombre, setNombre] = useState(negocio?.nombre ?? '');
   const [giro, setGiro] = useState(negocio?.giro ?? '');
@@ -33,8 +34,14 @@ export default function EditarNegocio() {
   const [apartadoMin, setApartadoMin] = useState(negocio?.apartadoMin ?? 60);
   const [aceptaTransf, setAceptaTransf] = useState(negocio?.aceptaTransferencia ?? false);
   const [datosPago, setDatosPago] = useState('');
+  const [datosOriginal, setDatosOriginal] = useState<string | null>(null); // lo que había guardado (null = no se pudo leer)
   const [pagoCargado, setPagoCargado] = useState(false); // ya se leyeron los datos guardados
   const [pagoTocado, setPagoTocado] = useState(false); // el comerciante los escribió o cambió
+  // Link de pago con tarjeta (el del propio proveedor del negocio: Mercado Pago, Clip, PayPal…)
+  const [linkPago, setLinkPago] = useState('');
+  const [linkGuardado, setLinkGuardado] = useState<string | null>(null); // null = no se pudo leer
+  const [linkTocado, setLinkTocado] = useState(false);
+  const [claveAvisada, setClaveAvisada] = useState(''); // los datos para los que ya se avisó de una CLABE que no cuadra
   const [error, setError] = useState('');
   const [guardado, setGuardado] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -44,13 +51,30 @@ export default function EditarNegocio() {
     let vivo = true;
     leerDatosPago().then((t) => {
       if (!vivo || t == null) return;
-      setDatosPago((actual) => actual || t);
+      setDatosOriginal(t);
+      // El texto que se pone solo cuando el negocio únicamente cobra con tarjeta no se muestra como si lo hubiera escrito él
+      setDatosPago((actual) => actual || (t === TEXTO_SOLO_TARJETA ? '' : t));
       setPagoCargado(true);
     });
     return () => {
       vivo = false;
     };
   }, [leerDatosPago]);
+
+  // El link de pago también es privado y está aparte.
+  useEffect(() => {
+    let vivo = true;
+    leerLinkPago().then((l) => {
+      if (!vivo || l == null) return;
+      setLinkGuardado(l);
+      setLinkPago((actual) => actual || l);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [leerLinkPago]);
+
+  const linkRevisado = useMemo(() => normalizarLinkDePago(linkPago), [linkPago]);
 
   const tiempos = useMemo(() => [...new Set([...OPCIONES_APARTADO, apartadoMin])].sort((a, b) => a - b), [apartadoMin]);
 
@@ -70,12 +94,35 @@ export default function EditarNegocio() {
     if (!giro.trim()) return setError('Escribe qué tipo de negocio es.');
     if (telefono.trim() && !telefonoValido(telefono)) return setError('El teléfono debe tener 10 dígitos.');
     if (correo.trim() && !correoValido(correo)) return setError('Escribe un correo válido o déjalo vacío.');
-    if (aceptaPedidos && aceptaTransf && (pagoCargado || pagoTocado) && !datosPago.trim())
-      return setError('Escribe a dónde te pueden transferir (banco, CLABE o número de cuenta y nombre), o apaga «Pago por transferencia».');
+    if (linkTocado && !linkRevisado.ok) return setError(linkRevisado.motivo);
+    // ¿Va a tener con qué cobrar por adelantado? Si no se pudo leer lo que había guardado, no se estorba con esta revisión.
+    const hayDatos = !!datosPago.trim();
+    const hayLink = linkTocado ? linkRevisado.ok && !!linkRevisado.url : !!linkGuardado;
+    const sabeLink = linkTocado || linkGuardado !== null;
+    const cobraPorAdelantado = aceptaPedidos && aceptaTransf;
+    if (cobraPorAdelantado && (pagoCargado || pagoTocado) && sabeLink && !hayDatos && !hayLink)
+      return setError('Escribe a dónde te pueden transferir (banco, CLABE o número de cuenta y nombre), pega tu link de pago con tarjeta, o apaga «Pago por adelantado».');
+    // Una CLABE mal escrita mandaría el dinero de tus clientes a otra persona: se avisa una vez antes de guardar.
+    const avisoClabe = cobraPorAdelantado && hayDatos ? avisoDeDatosDePago(datosPago) : null;
+    if (avisoClabe && claveAvisada !== datosPago) {
+      setClaveAvisada(datosPago);
+      return setError(`${avisoClabe} Si estás segura o seguro de que está bien, toca «Guardar cambios» otra vez.`);
+    }
+    // Lo que se guarda como «datos para transferir»: lo que escribió o, si solo cobra con tarjeta, un texto que lo explica
+    // (la base de datos pide que haya algo escrito para aceptar pagos por adelantado).
+    const datosAGuardar =
+      hayDatos && pagoTocado ? datosPago : !hayDatos && hayLink && cobraPorAdelantado && pagoCargado && datosOriginal !== TEXTO_SOLO_TARJETA ? TEXTO_SOLO_TARJETA : null;
     setGuardando(true);
-    // Primero los datos de pago (solo si se tocaron), luego el resto del negocio.
-    if (pagoTocado) {
-      const errPago = await guardarDatosPago(datosPago);
+    // Primero el link (si la base de datos todavía no lo acepta, no se guarda nada a medias), luego los datos de pago y al final el negocio.
+    if (linkTocado) {
+      const errLink = await guardarLinkPago(linkRevisado.ok ? linkRevisado.url : null);
+      if (errLink) {
+        setGuardando(false);
+        return setError(errLink);
+      }
+    }
+    if (datosAGuardar !== null) {
+      const errPago = await guardarDatosPago(datosAGuardar);
       if (errPago) {
         setGuardando(false);
         return setError(errPago);
@@ -235,34 +282,73 @@ export default function EditarNegocio() {
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                 <View style={{ flex: 1, gap: 2 }}>
                   <T size={15} weight={700}>
-                    Pago por transferencia
+                    Pago por adelantado
                   </T>
                   <T size={12} lh={1.4} color={C.muted}>
-                    El cliente te transfiere y te avisa; tú confirmas que llegó. El pago en persona (efectivo) siempre está disponible.
+                    El cliente paga antes de recoger (transferencia o tarjeta) y te avisa; tú confirmas que llegó. El pago en persona (efectivo) siempre está disponible.
                   </T>
                 </View>
-                <Toggle value={aceptaTransf} onChange={tocar(setAceptaTransf)} label="Pago por transferencia" />
+                <Toggle value={aceptaTransf} onChange={tocar(setAceptaTransf)} label="Pago por adelantado" />
               </View>
               {aceptaTransf ? (
-                <View style={{ gap: 6 }}>
-                  <Field
-                    label="Datos para que te transfieran"
-                    placeholder="Ej. BBVA · CLABE 0123 4567 8901 2345 67 · A nombre de María López"
-                    value={datosPago}
-                    onChangeText={(t) => {
-                      setDatosPago(t);
-                      setPagoTocado(true);
-                      setError('');
-                      setGuardado(false);
-                    }}
-                    multiline
-                    h={76}
-                    maxLength={500}
-                  />
-                  <T size={12} lh={1.4} color={C.muted}>
-                    🔒 Solo los ve un cliente cuando aceptas su pedido con transferencia. No salen en tu perfil.
-                  </T>
-                </View>
+                <>
+                  <View style={{ gap: 6 }}>
+                    <Field
+                      label="Datos para que te transfieran"
+                      placeholder="Ej. BBVA · CLABE 0123 4567 8901 2345 67 · A nombre de María López"
+                      value={datosPago}
+                      onChangeText={(t) => {
+                        setDatosPago(t);
+                        setPagoTocado(true);
+                        setError('');
+                        setGuardado(false);
+                      }}
+                      multiline
+                      h={76}
+                      maxLength={500}
+                    />
+                    <T size={12} lh={1.4} color={C.muted}>
+                      🔒 Solo los ve un cliente cuando aceptas su pedido con pago por adelantado. No salen en tu perfil. Si solo cobras con tarjeta, déjalo vacío.
+                    </T>
+                  </View>
+                  <View style={{ gap: 6 }}>
+                    <Field
+                      label="Link de pago con tarjeta (opcional)"
+                      placeholder="Ej. https://mpago.la/1AbCdEf"
+                      value={linkPago}
+                      onChangeText={(t) => {
+                        setLinkPago(t);
+                        setLinkTocado(true);
+                        setError('');
+                        setGuardado(false);
+                      }}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="url"
+                      maxLength={MAX_LINK + 60}
+                    />
+                    {!linkPago.trim() ? (
+                      <T size={12} lh={1.4} color={C.muted}>
+                        Pega aquí el link de pago de tu proveedor (PayPal.Me, Stripe, etc.) solo si deja que tu cliente escriba el monto. Si tu proveedor crea links con monto fijo (como Mercado Pago), déjalo vacío: en cada pedido aceptado aparecerá «Enviar link de pago» para pegar uno por el total exacto. Tu cliente paga con su tarjeta en la página de tu proveedor y te avisa; tú confirmas cuando te llegue el dinero. Mercaboot nunca ve ni guarda tarjetas ni cobra comisión; tu proveedor sí cobra la suya.
+                      </T>
+                    ) : linkRevisado.ok && linkRevisado.url ? (
+                      <>
+                        <T size={12.5} lh={1.4} weight={600} color={C.greenDark}>
+                          ✓ Tus clientes abrirán {proveedorDeLink(linkRevisado.url) ?? sitioDeLink(linkRevisado.url)}.
+                        </T>
+                        {!proveedorDeLink(linkRevisado.url) ? (
+                          <T size={12} lh={1.4} color={C.amberText}>
+                            No reconocemos ese proveedor. Revisa que sea tu link de cobro: tus clientes verán el sitio ({sitioDeLink(linkRevisado.url)}) antes de pagar.
+                          </T>
+                        ) : null}
+                      </>
+                    ) : !linkRevisado.ok ? (
+                      <T size={12.5} lh={1.4} weight={600} color={C.red} accessibilityRole="alert">
+                        {linkRevisado.motivo}
+                      </T>
+                    ) : null}
+                  </View>
+                </>
               ) : null}
             </>
           ) : null}

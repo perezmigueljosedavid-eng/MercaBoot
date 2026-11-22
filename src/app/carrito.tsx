@@ -281,16 +281,16 @@ export default function Carrito() {
               }}
             />
             <Chip
-              label="Transferencia"
+              label={negocio.aceptaTarjeta ? 'Transferencia o tarjeta' : 'Transferencia'}
               tone="green"
               marca
               h={44}
               active={pago === 'transferencia'}
               apagado={!negocio.aceptaTransferencia}
-              pista={negocio.aceptaTransferencia ? undefined : 'Este negocio no acepta transferencia por ahora'}
+              pista={negocio.aceptaTransferencia ? undefined : 'Este negocio no acepta pago por adelantado por ahora'}
               onPress={() => {
                 if (!negocio.aceptaTransferencia) {
-                  setNotaPago(`«${negocio.nombre}» todavía no acepta pago por transferencia: puedes pagar en persona.`);
+                  setNotaPago(`«${negocio.nombre}» todavía no acepta pago por adelantado (transferencia o tarjeta): puedes pagar en persona.`);
                   return;
                 }
                 setPago('transferencia');
@@ -305,15 +305,19 @@ export default function Carrito() {
           ) : null}
           <T size={12} lh={1.45} color={C.muted}>
             {pago === 'transferencia'
-              ? 'Cuando el negocio acepte tu pedido te mostramos sus datos para transferir. Después tocas «Ya pagué» y el negocio lo confirma. Mientras tu pago no se confirme, el tiempo de apartado sigue corriendo.'
+              ? negocio.aceptaTarjeta
+                ? 'Cuando el negocio acepte tu pedido te mostramos cómo pagar: sus datos para transferir y el botón para pagar con tarjeta. Después tocas «Ya pagué» y el negocio lo confirma. Mientras tu pago no se confirme, el tiempo de apartado sigue corriendo.'
+                : 'Cuando el negocio acepte tu pedido te mostramos sus datos para transferir. Después tocas «Ya pagué» y el negocio lo confirma. Mientras tu pago no se confirme, el tiempo de apartado sigue corriendo.'
               : `Pagas ${entrega === 'domicilio' ? 'cuando te llega' : 'cuando pasas por él'}. No se cobra nada dentro de la app.`}
           </T>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Icon name="lock" size={13} color={C.dash} />
-            <T size={12} color={C.dash}>
-              Pago con tarjeta en línea: próximamente.
-            </T>
-          </View>
+          {negocio.aceptaTarjeta && negocio.aceptaTransferencia ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Icon name="card" size={13} color={C.greenDark} />
+              <T size={12} color={C.greenDark} style={{ flex: 1 }}>
+                Este negocio también cobra con tarjeta, en su propia página de pago. Mercaboot no ve ni guarda tu tarjeta.
+              </T>
+            </View>
+          ) : null}
         </Card>
 
         <Field

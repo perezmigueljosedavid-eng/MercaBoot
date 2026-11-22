@@ -283,7 +283,7 @@ export default function Negocio() {
             </T>
             <T size={13} lh={1.4} color={recibePedidos ? C.greenDark : C.greyText}>
               {recibePedidos
-                ? `Agrega productos y aparta. Se te guarda ${minutosEnPalabras(n.apartadoMin)} mientras el negocio lo acepta y lo prepara. Pagas ${n.aceptaTransferencia ? 'en persona o por transferencia' : 'en persona'}${n.aDomicilio ? ' y puedes pedirlo a domicilio' : ''}.${n.abierto ? '' : ' Ahora está cerrado: espera a que abra.'}`
+                ? `Agrega productos y aparta. Se te guarda ${minutosEnPalabras(n.apartadoMin)} mientras el negocio lo acepta y lo prepara. Pagas ${n.aceptaTransferencia ? (n.aceptaTarjeta ? 'en persona, por transferencia o con tarjeta' : 'en persona o por transferencia') : 'en persona'}${n.aDomicilio ? ' y puedes pedirlo a domicilio' : ''}.${n.abierto ? '' : ' Ahora está cerrado: espera a que abra.'}`
                 : 'Puedes escribirle por el chat para preguntar o ponerte de acuerdo.'}
             </T>
           </Card>

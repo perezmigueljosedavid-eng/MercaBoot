@@ -155,6 +155,8 @@ export function PedirTexto({
   obligatorio = false,
   confirmar = 'Enviar',
   peligro = false,
+  link = false,
+  validar,
   onConfirmar,
   onCancelar,
 }: {
@@ -166,6 +168,10 @@ export function PedirTexto({
   obligatorio?: boolean;
   confirmar?: string;
   peligro?: boolean;
+  /** Es un link: el teclado no pone mayúsculas ni corrige. */
+  link?: boolean;
+  /** Revisa lo escrito antes de enviarlo: si devuelve un texto, se muestra ahí mismo y no se envía. */
+  validar?: (valor: string) => string | null;
   onConfirmar: (valor: string) => void;
   onCancelar: () => void;
 }) {
@@ -182,6 +188,8 @@ export function PedirTexto({
             obligatorio={obligatorio}
             confirmar={confirmar}
             peligro={peligro}
+            link={link}
+            validar={validar}
             onConfirmar={onConfirmar}
             onCancelar={onCancelar}
           />
@@ -199,6 +207,8 @@ function CuerpoPedirTexto({
   obligatorio,
   confirmar,
   peligro,
+  link,
+  validar,
   onConfirmar,
   onCancelar,
 }: Omit<React.ComponentProps<typeof PedirTexto>, 'visible'>) {
@@ -225,6 +235,9 @@ function CuerpoPedirTexto({
         accessibilityLabel={etiqueta}
         multiline
         maxLength={300}
+        autoCapitalize={link ? 'none' : undefined}
+        autoCorrect={link ? false : undefined}
+        keyboardType={link ? 'url' : undefined}
         style={{
           minHeight: 74,
           paddingHorizontal: 14,
@@ -255,6 +268,8 @@ function CuerpoPedirTexto({
           flex={1}
           onPress={() => {
             if (obligatorio && !valor.trim()) return setAviso('Escribe una respuesta.');
+            const problema = validar?.(valor.trim());
+            if (problema) return setAviso(problema);
             onConfirmar(valor.trim());
           }}
         />

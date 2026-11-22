@@ -60,7 +60,7 @@ export default function PedidosComerciante() {
           <Toggle value={negocio.aceptaPedidos} onChange={(v) => actualizarNegocio({ aceptaPedidos: v })} label="Recibir pedidos" />
         </View>
         <T size={12} lh={1.4} color={C.muted}>
-          Guardas cada pedido {minutosEnPalabras(negocio.apartadoMin)}. {negocio.aceptaTransferencia ? 'Aceptas transferencia.' : 'Solo pago en persona.'}{' '}
+          Guardas cada pedido {minutosEnPalabras(negocio.apartadoMin)}. {negocio.aceptaTransferencia ? (negocio.aceptaTarjeta ? 'Aceptas transferencia y tarjeta.' : 'Aceptas transferencia.') : 'Solo pago en persona.'}{' '}
           <T size={12} weight={700} color={C.green} onPress={() => router.push('/editar-negocio')}>
             Cambiar
           </T>

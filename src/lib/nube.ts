@@ -56,6 +56,8 @@ export interface FilaNegocio {
   apartado_minutos: number;
   acepta_pedidos: boolean;
   acepta_transferencia: boolean;
+  /** Cobra también con tarjeta por un link de pago (puede faltar si la base de datos es de una versión anterior). */
+  acepta_tarjeta?: boolean | null;
   /** Horario automático (pueden faltar en copias guardadas de versiones anteriores). */
   horario_auto?: boolean | null;
   horario_semana?: unknown;
@@ -252,6 +254,7 @@ export const negocioDeFila = (f: FilaNegocio): Negocio => ({
   apartadoMin: f.apartado_minutos ?? 60,
   aceptaPedidos: f.acepta_pedidos ?? true,
   aceptaTransferencia: !!f.acepta_transferencia,
+  aceptaTarjeta: !!f.acepta_tarjeta,
   horarioAuto: !!f.horario_auto,
   horarioSemana: leerSemana(f.horario_semana),
   creado: ms(f.creado),
@@ -438,6 +441,17 @@ export function esErrorDeRed(e: unknown): boolean {
     x.status === 0 ||
     /failed to fetch|network request failed|network error|networkerror|load failed|fetch failed|timeout|timed out|aborted/.test(m)
   );
+}
+
+/**
+ * ¿El error es que la base de datos todavía no tiene una función o una columna que la app nueva espera? Pasa cuando se instala la
+ * app antes de aplicar la última actualización de la base de datos (una versión anterior del servidor). Así la app puede decir
+ * «todavía no está disponible» en lugar de «algo salió mal».
+ */
+export function faltaEnLaBase(e: unknown): boolean {
+  const x = (e ?? {}) as ErrorLike;
+  const c = x.code ?? '';
+  return c === 'PGRST202' || c === 'PGRST204' || c === '42883' || c === '42703' || /could not find the|schema cache/i.test(x.message ?? '');
 }
 
 /** Mensaje en español para cualquier error de Supabase (cuentas o tablas). */
