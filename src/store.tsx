@@ -12,6 +12,7 @@ import type {
   Cuenta,
   EntregaPedido,
   Etiqueta,
+  HorarioSemana,
   LineaCarrito,
   LineaPedido,
   Mensaje,
@@ -24,9 +25,12 @@ import type {
   TipoAviso,
   TipoProducto,
 } from './data/tipos';
+import { clasificar } from './ia/ingredientes';
 import {
   avisoDeFila,
+  columnasProducto,
   conversacionDeFila,
+  esColumnaFaltante,
   esErrorDeRed,
   favoritoDeFila,
   filaDeCambioNegocio,
@@ -38,6 +42,7 @@ import {
   productoDeFila,
   resenaDeFila,
   textoError,
+  usarTodasLasColumnasProducto,
   type Favorito,
   type FilaAviso,
   type FilaConversacion,
@@ -51,7 +56,10 @@ import {
   type FilaProducto,
   type FilaResena,
 } from './lib/nube';
+import { guardarFoto, quitarFoto, vaciarFotos } from './lib/fotos';
+import { sinHorario, semanaValida, textoHorario } from './lib/horario';
 import { avisoDeCambio, cantidadTexto, disponibleParaPedir, esActivo, pasoCantidad, redondear, totales } from './lib/pedidos';
+import { trocear, type CambioDeProducto } from './lib/precios';
 import { supabase } from './lib/supabase';
 
 /**
@@ -111,6 +119,26 @@ export interface DatosProducto {
   caracteristicas?: string[];
   fotoUri?: string;
   medios?: boolean;
+}
+
+/** Un producto para agregar por lote (catálogo Mercaboot, importar desde Excel). Lo que falta lo deduce el asistente. */
+export interface ProductoDeLote {
+  nombre: string;
+  precio?: number;
+  unidad?: string;
+  categoria?: CategoriaProducto;
+  disponible?: boolean;
+  tipo?: TipoProducto;
+  etiquetas?: Etiqueta[];
+  ingrediente?: string;
+  descripcion?: string;
+}
+
+/** Lo que dice la base de datos después de agregar productos por lote. */
+export interface ResumenLote {
+  agregados: number;
+  repetidos: number;
+  invalidos: number;
 }
 
 /** Un aviso nuevo del comerciante. `hasta` (ms): sin valor, «ya no hay / ya hay / cerrado» duran hasta el fin del día y lo demás no vence. */
@@ -272,6 +300,7 @@ type Accion =
   | { t: 'neg'; n: Negocio }
   | { t: 'negDel'; id: string }
   | { t: 'prod'; p: Producto }
+  | { t: 'prods'; ps: Producto[]; del: string[] }
   | { t: 'prodDel'; id: string }
   | { t: 'fav'; f: Favorito }
   | { t: 'favDel'; id: string }
@@ -334,6 +363,23 @@ function reductor(b: Base, a: Accion): Base {
       return { ...b, negocios: b.negocios.filter((x) => x.id !== a.id) };
     case 'prod':
       return { ...b, productos: upsert(b.productos, a.p) };
+    case 'prods': {
+      // Muchos cambios juntos (por ejemplo, 300 precios de una vez) se aplican en una sola pasada.
+      if (a.ps.length === 0 && a.del.length === 0) return b;
+      const quitar = new Set(a.del);
+      const nuevos = new Map(a.ps.map((p) => [p.id, p]));
+      const lista: Producto[] = [];
+      for (const x of b.productos) {
+        if (quitar.has(x.id)) continue;
+        const n = nuevos.get(x.id);
+        if (n) {
+          lista.push(n);
+          nuevos.delete(x.id);
+        } else lista.push(x);
+      }
+      for (const n of nuevos.values()) lista.push(n);
+      return { ...b, productos: lista };
+    }
     case 'prodDel':
       return { ...b, productos: b.productos.filter((x) => x.id !== a.id) };
     case 'fav':
@@ -387,8 +433,9 @@ function reductor(b: Base, a: Accion): Base {
 
 const PREFIJO = 'mercaboot:v3:';
 const claveModo = (uid: string) => `${PREFIJO}modo:${uid}`;
-// «cache21»: la copia de la versión anterior no tenía pedidos ni existencias, así que no se reutiliza.
-const claveCache = (uid: string) => `${PREFIJO}cache21:${uid}`;
+// «cache22»: desde la versión 2 los productos de la copia ya no llevan la foto adentro, así que la copia de antes no se reutiliza.
+const claveCache = (uid: string) => `${PREFIJO}cache22:${uid}`;
+const claveCacheVieja = (uid: string) => `${PREFIJO}cache21:${uid}`;
 const claveCarrito = (uid: string) => `${PREFIJO}carrito:${uid}`;
 /** Pedidos que se guardan en la copia local cuando no cabe todo. */
 const PEDIDOS_EN_COPIA = 40;
@@ -405,6 +452,72 @@ interface Cache {
   frecuentes: ClienteFrecuente[];
   avisos?: Aviso[];
   resenas?: Resena[];
+}
+
+/**
+ * El texto de la copia local. Si no cabe en el almacenamiento del teléfono se va achicando: primero sin logos, luego con
+ * menos pedidos y, al final, solo con los productos del negocio propio y de los favoritos. `null` si ni así cabe.
+ */
+function textoDeCopia(c: Cache, uid: string): string | null {
+  let texto = JSON.stringify(c);
+  if (texto.length <= LIMITE_CACHE) return texto;
+  c = { ...c, negocios: c.negocios.map((n) => ({ ...n, logoUri: undefined })) };
+  texto = JSON.stringify(c);
+  if (texto.length <= LIMITE_CACHE) return texto;
+  c = { ...c, pedidos: [...c.pedidos].sort((a, b) => b.creado - a.creado).slice(0, PEDIDOS_EN_COPIA) };
+  texto = JSON.stringify(c);
+  if (texto.length <= LIMITE_CACHE) return texto;
+  const mio = c.negocios.find((n) => n.duenoId === uid)?.id;
+  const favs = new Set(c.favs.filter((f) => f.usuarioId === uid).map((f) => f.negocioId));
+  if (mio) favs.add(mio);
+  c = { ...c, productos: c.productos.filter((p) => favs.has(p.negocioId)) };
+  texto = JSON.stringify(c);
+  if (texto.length <= LIMITE_CACHE) return texto;
+  c = { ...c, productos: c.productos.filter((p) => p.negocioId === mio) };
+  texto = JSON.stringify(c);
+  return texto.length <= LIMITE_CACHE ? texto : null;
+}
+
+/** Lo que devuelve una lectura de productos. */
+type LecturaProductos = { data: FilaProducto[]; error: null } | { data: null; error: unknown };
+
+/**
+ * Lee TODOS los productos que esta cuenta puede ver, de 1,000 en 1,000 (la base de datos no entrega más de 1,000 filas por
+ * consulta, y una tienda de abarrotes puede tener más) y sin las fotos, que se bajan aparte cuando se van a ver.
+ */
+async function leerProductos(): Promise<LecturaProductos> {
+  const PAGINA = 1000;
+  const filas: FilaProducto[] = [];
+  for (let desde = 0; desde < 100_000; desde += PAGINA) {
+    const pedir = (cols: string) => supabase.from('productos').select(cols).order('id', { ascending: true }).range(desde, desde + PAGINA - 1);
+    let r = await pedir(columnasProducto());
+    if (r.error && esColumnaFaltante(r.error) && columnasProducto() !== '*') {
+      // Esta base de datos todavía no tiene la actualización de la versión 2: se lee como antes (con fotos)
+      usarTodasLasColumnasProducto();
+      r = await pedir('*');
+    }
+    if (r.error) return { data: null, error: r.error };
+    const pagina = (r.data ?? []) as unknown as FilaProducto[];
+    filas.push(...pagina);
+    if (pagina.length < PAGINA) break;
+  }
+  absorberFotos(filas);
+  return { data: filas, error: null };
+}
+
+/** Si las filas traen la foto (base de datos sin la actualización, o un aviso en vivo), se guarda en memoria para no volver a bajarla. */
+function absorberFotos(filas: FilaProducto[]) {
+  for (const f of filas) if (f.foto_uri) guardarFoto(f.id, f.foto_huella ?? undefined, f.foto_uri);
+}
+
+/** Pide un producto con las columnas de la lista; si la base de datos no tiene alguna, repite con todas. */
+async function conColumnas(pedir: (cols: string) => PromiseLike<{ data: unknown; error: unknown }>): Promise<{ data: unknown; error: unknown }> {
+  const r = await pedir(columnasProducto());
+  if (r.error && esColumnaFaltante(r.error) && columnasProducto() !== '*') {
+    usarTodasLasColumnasProducto();
+    return pedir('*');
+  }
+  return r;
 }
 
 /* ───────── contexto ───────── */
@@ -458,6 +571,12 @@ interface Ctx {
   editarProducto: (id: string, p: Partial<DatosProducto>) => Promise<string | null>;
   eliminarProducto: (id: string) => Promise<string | null>;
   setDisponible: (id: string, v: boolean) => void;
+  /** Cambia precios y existencias («hay / se acabó») de muchos productos de golpe. Devuelve cuántos cambiaron o el motivo. */
+  actualizarProductosLote: (cambios: CambioDeProducto[]) => Promise<{ error: string } | { cambiados: number }>;
+  /** Agrega muchos productos de golpe (los repetidos y los que no sirven se cuentan aparte). */
+  agregarProductosLote: (productos: ProductoDeLote[]) => Promise<{ error: string } | ResumenLote>;
+  /** Guarda el horario de la semana y, si es automático, la base abre y cierra el negocio sola. `semana` en null = sin horario. */
+  guardarHorario: (auto: boolean, semana: HorarioSemana | null) => Promise<string | null>;
   /** El comerciante publica un aviso (se acabó algo, ya hay, promoción, regalo…). Devuelve el motivo si no se pudo. */
   publicarAviso: (a: DatosAviso) => Promise<string | null>;
   quitarAviso: (id: string) => Promise<string | null>;
@@ -548,6 +667,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const propias = useRef(new Map<string, number>());
   /** Última vez que se pidió soltar los pedidos que se pasaron de tiempo. */
   const ultimoVencer = useRef(0);
+  /** Última vez que se leyó toda la lista de productos (con muchos productos no se vuelve a leer a cada rato). */
+  const ultimaLecturaProductos = useRef(0);
+  const forzarProductos = useRef(false);
+  /** Cambios de productos que llegaron en vivo y esperan un instante para aplicarse juntos (null = se borró). */
+  const bufferProd = useRef(new Map<string, FilaProducto | null>());
+  const timerProd = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     baseRef.current = base;
@@ -618,9 +743,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   /* ───── leer y escribir en la nube ───── */
 
-  const refrescar = useCallback(async () => {
+  /**
+   * Lee todo de la nube. La lista de productos es lo más pesado, así que con el aviso en vivo funcionando solo se vuelve
+   * a leer entera cada ~minuto (`forzar` la lee ya).
+   */
+  const refrescarInterno = useCallback(async (forzar: boolean) => {
     const id = uidRef.current;
     if (!id || !NUBE_CONFIGURADA) return;
+    if (forzar) forzarProductos.current = true;
     if (enVuelo.current) {
       pendiente.current = true;
       return;
@@ -629,6 +759,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     try {
       do {
         pendiente.current = false;
+        const leerProd =
+          forzarProductos.current ||
+          baseRef.current.productos.length === 0 ||
+          Date.now() - ultimaLecturaProductos.current > (canalVivo.current ? 55_000 : 14_000);
+        forzarProductos.current = false;
         // Los pedidos que se pasaron de tiempo se sueltan (la base de datos también lo hace sola cada minuto).
         if (Date.now() - ultimoVencer.current > 30_000) {
           ultimoVencer.current = Date.now();
@@ -640,7 +775,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const [perfil, negocios, productos, favs, convs, peds, frecs, avs, ress] = await Promise.all([
           supabase.from('perfiles').select('id,nombre,correo,telefono,foto_uri').eq('id', id).maybeSingle(),
           supabase.from('negocios').select('*').order('creado', { ascending: true }),
-          supabase.from('productos').select('*'),
+          leerProd ? leerProductos() : Promise.resolve(null),
           supabase.from('favoritos').select('id,usuario_id,negocio_id'),
           supabase.from('conversaciones').select('*'),
           supabase.from('pedidos').select('*').order('creado', { ascending: false }).limit(300),
@@ -650,7 +785,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         ]);
         if (uidRef.current !== id) return;
         // Los avisos y las reseñas son un extra: si todavía no existen en la base (no se corrió la actualización), la app sigue funcionando sin ellos.
-        const error = [perfil, negocios, productos, favs, convs, peds, frecs].map((r) => r.error).find(Boolean);
+        const error = [perfil, negocios, productos, favs, convs, peds, frecs].map((r) => r?.error).find(Boolean);
         if (error) {
           if (esErrorDeRed(error)) setEstadoRed('sin-internet');
           else setEstadoRed(canalVivo.current ? 'en-vivo' : 'sin-vivo');
@@ -660,7 +795,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         dispatch({
           t: 'todo',
           negocios: ((negocios.data ?? []) as FilaNegocio[]).map(negocioDeFila),
-          productos: ((productos.data ?? []) as FilaProducto[]).map(productoDeFila),
+          productos: productos?.data ? productos.data.map(productoDeFila) : baseRef.current.productos,
           favs: ((favs.data ?? []) as FilaFavorito[]).map(favoritoDeFila),
           conversaciones: ((convs.data ?? []) as FilaConversacion[]).map(conversacionDeFila),
           pedidos: ((peds.data ?? []) as FilaPedido[]).map(pedidoDeFila),
@@ -668,6 +803,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           avisos: avs.error ? baseRef.current.avisos : ((avs.data ?? []) as FilaAviso[]).map(avisoDeFila),
           resenas: ress.error ? baseRef.current.resenas : ((ress.data ?? []) as FilaResena[]).map(resenaDeFila),
         });
+        if (productos?.data) ultimaLecturaProductos.current = Date.now();
         setEstadoRed(canalVivo.current ? 'en-vivo' : 'sin-vivo');
         // Los chats que están abiertos también se ponen al día.
         for (const conv of abiertos.current.keys()) {
@@ -681,6 +817,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       enVuelo.current = false;
     }
   }, []);
+
+  /** Lee todo ahora mismo (también la lista de productos). */
+  const refrescar = useCallback(() => refrescarInterno(true), [refrescarInterno]);
 
   /**
    * Vuelve a pedir un solo negocio en un momento (varios avisos juntos se convierten en una sola consulta).
@@ -700,6 +839,58 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }, 700),
     );
   }, []);
+
+  /** Vuelve a leer unos productos (sin la foto) y los pone en la lista. Sirve cuando un aviso en vivo no trae todo. */
+  const confirmarProductos = useCallback(async (ids: string[]) => {
+    const quien = uidRef.current;
+    if (!quien || ids.length === 0) return;
+    const ps: Producto[] = [];
+    for (const tanda of trocear(ids, 100)) {
+      const { data, error } = await conColumnas((cols) => supabase.from('productos').select(cols).in('id', tanda));
+      if (error || !Array.isArray(data)) return;
+      absorberFotos(data as unknown as FilaProducto[]);
+      ps.push(...(data as unknown as FilaProducto[]).map(productoDeFila));
+    }
+    if (uidRef.current === quien) dispatch({ t: 'prods', ps, del: [] });
+  }, []);
+
+  /**
+   * Aplica juntos los cambios de productos que llegaron en vivo. Un cambio de 300 precios manda 300 avisos casi al mismo
+   * tiempo: así la pantalla se arma una sola vez en lugar de 300.
+   */
+  const vaciarProductos = useCallback(() => {
+    timerProd.current = null;
+    const pendientes = bufferProd.current;
+    if (pendientes.size === 0) return;
+    bufferProd.current = new Map();
+    const previos = new Map(baseRef.current.productos.map((x) => [x.id, x]));
+    const ps: Producto[] = [];
+    const del: string[] = [];
+    const dudosos: string[] = [];
+    for (const [id, fila] of pendientes) {
+      if (fila === null) {
+        del.push(id);
+        quitarFoto(id);
+        continue;
+      }
+      const p = productoDeFila(fila);
+      if ('foto_uri' in fila) {
+        // El aviso trae la foto (producto nuevo o foto cambiada): se guarda en memoria y no hay que bajarla
+        if (fila.foto_uri) guardarFoto(id, fila.foto_huella ?? undefined, fila.foto_uri);
+        else quitarFoto(id);
+      } else {
+        // Los avisos en vivo omiten la foto si no cambió (y la huella nunca viaja): se conserva lo que ya se sabía
+        const previo = previos.get(id);
+        if (previo) {
+          p.tieneFoto = previo.tieneFoto;
+          p.fotoHuella = previo.fotoHuella;
+        } else dudosos.push(id);
+      }
+      ps.push(p);
+    }
+    dispatch({ t: 'prods', ps, del });
+    if (dudosos.length > 0) void confirmarProductos(dudosos);
+  }, [confirmarProductos]);
 
   const alCambiar = useCallback(
     (tabla: string, p: { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> }) => {
@@ -722,8 +913,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           }
           break;
         case 'productos':
-          if (borrar) dispatch({ t: 'prodDel', id });
-          else dispatch({ t: 'prod', p: productoDeFila(nuevo as FilaProducto) });
+          if (borrar) bufferProd.current.set(id, null);
+          else bufferProd.current.set((nuevo as FilaProducto).id, nuevo as FilaProducto);
+          timerProd.current ??= setTimeout(vaciarProductos, 150);
           break;
         case 'favoritos':
           if (borrar) dispatch({ t: 'favDel', id });
@@ -770,7 +962,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         default:
       }
     },
-    [avisar, confirmarNegocio],
+    [avisar, confirmarNegocio, vaciarProductos],
   );
 
   const cerrarCanal = useCallback(() => {
@@ -817,6 +1009,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (!vivo) return;
         cerrarCanal();
         dispatch({ t: 'limpiar' });
+        if (timerProd.current) clearTimeout(timerProd.current);
+        timerProd.current = null;
+        bufferProd.current = new Map();
+        ultimaLecturaProductos.current = 0;
+        vaciarFotos();
         fijarCarro(null, false);
         lineasGuardadas.current.clear();
         propias.current.clear();
@@ -857,6 +1054,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           const guardado = JSON.parse(c) as Cache;
           dispatch({ t: 'cache', c: guardado });
         }
+        // La copia de la versión anterior ya no sirve (llevaba las fotos adentro): se libera ese espacio
+        AsyncStorage.removeItem(claveCacheVieja(uid)).catch(() => {});
       } catch {
         /* sin copia local: se espera a la nube */
       }
@@ -875,7 +1074,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!uid || !base.perfil) return;
     const t = setTimeout(() => {
-      let c: Cache = {
+      const c: Cache = {
         perfil: base.perfil,
         negocios: base.negocios,
         productos: base.productos,
@@ -886,16 +1085,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         avisos: base.avisos,
         resenas: base.resenas,
       };
-      let texto = JSON.stringify(c);
-      if (texto.length > LIMITE_CACHE) {
-        c = { ...c, negocios: c.negocios.map((n) => ({ ...n, logoUri: undefined })) };
-        texto = JSON.stringify(c);
-      }
-      if (texto.length > LIMITE_CACHE) {
-        c = { ...c, pedidos: [...c.pedidos].sort((a, b) => b.creado - a.creado).slice(0, PEDIDOS_EN_COPIA) };
-        texto = JSON.stringify(c);
-      }
-      if (texto.length <= LIMITE_CACHE) AsyncStorage.setItem(claveCache(uid), texto).catch(() => {});
+      const texto = textoDeCopia(c, uid);
+      if (texto) AsyncStorage.setItem(claveCache(uid), texto).catch(() => {});
     }, 1500);
     return () => clearTimeout(t);
   }, [uid, base.perfil, base.negocios, base.productos, base.favs, base.conversaciones, base.pedidos, base.frecuentes, base.avisos, base.resenas]);
@@ -911,15 +1102,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const t = setInterval(() => {
       vueltas += 1;
       // Con el aviso en vivo funcionando basta con confirmar de vez en cuando; si no, se pregunta seguido.
-      if (!canalVivo.current || estadoRedRef.current === 'sin-internet' || vueltas % Math.round(SONDEO_EN_VIVO / SONDEO_SIN_VIVO) === 0) refrescar();
+      if (!canalVivo.current || estadoRedRef.current === 'sin-internet' || vueltas % Math.round(SONDEO_EN_VIVO / SONDEO_SIN_VIVO) === 0) void refrescarInterno(false);
     }, SONDEO_SIN_VIVO);
     const sub = AppState.addEventListener('change', (e) => {
-      if (e === 'active') refrescar();
+      if (e === 'active') void refrescarInterno(false);
     });
     // En el navegador el sistema avisa al instante cuando se va o regresa el internet.
     const enWeb = Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.addEventListener === 'function';
     const alVolver = () => {
-      refrescar();
+      void refrescarInterno(true);
     };
     const alIrse = () => setEstadoRed('sin-internet');
     if (enWeb) {
@@ -934,7 +1125,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         window.removeEventListener('offline', alIrse);
       }
     };
-  }, [uid, refrescar]);
+  }, [uid, refrescarInterno]);
 
   /* ───── datos derivados ───── */
 
@@ -1321,29 +1512,34 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (baseRef.current.productos.some((x) => x.negocioId === mio.id && x.nombre.trim().toLowerCase() === nombre.toLowerCase())) {
       return 'Ya tienes un producto con ese nombre.';
     }
-    const { data, error } = await supabase
-      .from('productos')
-      .insert({
-        negocio_id: mio.id,
-        nombre,
-        precio: d.precio ?? null,
-        unidad: d.unidad,
-        disponible: d.disponible,
-        categoria: d.categoria,
-        por_encargo: !!d.porEncargo,
-        cantidad: d.cantidad ?? null,
-        tipo: d.tipo ?? null,
-        etiquetas: d.etiquetas ?? [],
-        ingrediente: d.ingrediente ?? null,
-        descripcion: d.descripcion?.trim() || null,
-        caracteristicas: (d.caracteristicas ?? []).map((c) => c.trim()).filter(Boolean),
-        foto_uri: d.fotoUri || null,
-        medios: d.medios ?? null,
-      })
-      .select('*')
-      .single();
+    const { data, error } = await conColumnas((cols) =>
+      supabase
+        .from('productos')
+        .insert({
+          negocio_id: mio.id,
+          nombre,
+          precio: d.precio ?? null,
+          unidad: d.unidad,
+          disponible: d.disponible,
+          categoria: d.categoria,
+          por_encargo: !!d.porEncargo,
+          cantidad: d.cantidad ?? null,
+          tipo: d.tipo ?? null,
+          etiquetas: d.etiquetas ?? [],
+          ingrediente: d.ingrediente ?? null,
+          descripcion: d.descripcion?.trim() || null,
+          caracteristicas: (d.caracteristicas ?? []).map((c) => c.trim()).filter(Boolean),
+          foto_uri: d.fotoUri || null,
+          medios: d.medios ?? null,
+        })
+        .select(cols)
+        .single(),
+    );
     if (error) return (error as { code?: string }).code === '23505' ? 'Ya tienes un producto con ese nombre.' : textoError(error);
-    dispatch({ t: 'prod', p: productoDeFila(data as FilaProducto) });
+    const fila = data as FilaProducto;
+    // La foto que la persona acaba de elegir ya está en el teléfono: no hace falta bajarla
+    if (d.fotoUri) guardarFoto(fila.id, fila.foto_huella ?? undefined, d.fotoUri);
+    dispatch({ t: 'prod', p: productoDeFila(fila) });
     return null;
   }, []);
 
@@ -1379,10 +1575,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if ('fotoUri' in d) fila.foto_uri = d.fotoUri || null;
     if ('medios' in d) fila.medios = d.medios ?? null;
     if (Object.keys(fila).length === 0) return null;
-    const { data, error } = await supabase.from('productos').update(fila).eq('id', id).select('*');
+    const { data, error } = await conColumnas((cols) => supabase.from('productos').update(fila).eq('id', id).select(cols));
     if (error) return (error as { code?: string }).code === '23505' ? 'Ya tienes un producto con ese nombre.' : textoError(error);
-    if (!data || data.length === 0) return 'No encontramos ese producto.';
-    dispatch({ t: 'prod', p: productoDeFila(data[0] as FilaProducto) });
+    if (!Array.isArray(data) || data.length === 0) return 'No encontramos ese producto.';
+    const nueva = data[0] as FilaProducto;
+    if ('fotoUri' in d) {
+      if (d.fotoUri) guardarFoto(id, nueva.foto_huella ?? undefined, d.fotoUri);
+      else quitarFoto(id);
+    }
+    dispatch({ t: 'prod', p: productoDeFila(nueva) });
     return null;
   }, []);
 
@@ -1403,8 +1604,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (!mio || !prod || prod.negocioId !== mio.id || prod.disponible === v) return;
       dispatch({ t: 'prod', p: { ...prod, disponible: v, actualizado: Date.now() } });
       (async () => {
-        const { data, error } = await supabase.from('productos').update({ disponible: v }).eq('id', id).select('*');
-        if (error || !data || data.length === 0) {
+        const { data, error } = await conColumnas((cols) => supabase.from('productos').update({ disponible: v }).eq('id', id).select(cols));
+        if (error || !Array.isArray(data) || data.length === 0) {
           dispatch({ t: 'prod', p: prod });
           avisar(error ? textoError(error) : 'No se pudo cambiar el producto.');
           return;
@@ -1414,6 +1615,100 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     },
     [avisar],
   );
+
+  /* ───── tiendas con muchos productos ───── */
+
+  const actualizarProductosLote = useCallback<Ctx['actualizarProductosLote']>(async (cambios) => {
+    const mio = miNegocio();
+    if (!mio) return { error: 'Tu cuenta no administra ningún negocio.' };
+    const propios = new Set(baseRef.current.productos.filter((p) => p.negocioId === mio.id).map((p) => p.id));
+    const validos = cambios.filter((c) => propios.has(c.id));
+    if (validos.length === 0) return { cambiados: 0 };
+    const hechos: CambioDeProducto[] = [];
+    let cambiados = 0;
+    // Lo que ya se guardó se muestra enseguida (aunque una tanda posterior falle)
+    const aplicar = () => {
+      const porId = new Map(baseRef.current.productos.map((p) => [p.id, p]));
+      const ps: Producto[] = [];
+      for (const c of hechos) {
+        const p = porId.get(c.id);
+        if (!p) continue;
+        ps.push({
+          ...p,
+          precio: c.precio !== undefined ? (c.precio ?? undefined) : p.precio,
+          disponible: c.disponible ?? p.disponible,
+          actualizado: Date.now(),
+        });
+      }
+      dispatch({ t: 'prods', ps, del: [] });
+    };
+    for (const tanda of trocear(validos, 300)) {
+      const { data, error } = await supabase.rpc('productos_actualizar_lote', { p_negocio: mio.id, p_cambios: tanda });
+      if (error) {
+        aplicar();
+        const motivo = textoError(error);
+        return { error: cambiados > 0 ? `Se guardaron ${cambiados} cambios, pero después pasó esto: ${motivo}` : motivo };
+      }
+      cambiados += typeof data === 'number' ? data : 0;
+      hechos.push(...tanda);
+    }
+    aplicar();
+    return { cambiados };
+  }, []);
+
+  const agregarProductosLote = useCallback<Ctx['agregarProductosLote']>(
+    async (productos) => {
+      const mio = miNegocio();
+      if (!mio) return { error: 'Tu cuenta no administra ningún negocio.' };
+      if (productos.length === 0) return { agregados: 0, repetidos: 0, invalidos: 0 };
+      // Lo que falta (categoría, tipo, sabores, ingrediente) lo deduce el asistente, igual que al agregar un producto a mano
+      const filas = productos.map((p) => {
+        const c = clasificar(p.nombre, mio.giro, p.tipo);
+        return {
+          nombre: p.nombre,
+          precio: p.precio ?? null,
+          unidad: p.unidad,
+          categoria: p.categoria ?? c.categoria,
+          disponible: p.disponible ?? true,
+          tipo: p.tipo ?? c.tipo,
+          etiquetas: p.etiquetas ?? c.etiquetas,
+          ingrediente: p.ingrediente ?? c.ingrediente,
+          descripcion: p.descripcion,
+        };
+      });
+      const resumen: ResumenLote = { agregados: 0, repetidos: 0, invalidos: 0 };
+      for (const tanda of trocear(filas, 300)) {
+        const { data, error } = await supabase.rpc('productos_agregar_lote', { p_negocio: mio.id, p_productos: tanda });
+        if (error) {
+          void refrescarInterno(true);
+          const motivo = textoError(error);
+          return { error: resumen.agregados > 0 ? `Se agregaron ${resumen.agregados} productos, pero después pasó esto: ${motivo}` : motivo };
+        }
+        const r = (data ?? {}) as Partial<ResumenLote>;
+        resumen.agregados += r.agregados ?? 0;
+        resumen.repetidos += r.repetidos ?? 0;
+        resumen.invalidos += r.invalidos ?? 0;
+      }
+      // Los productos nuevos se leen de la nube (traen su id) para verlos de inmediato
+      await refrescarInterno(true);
+      return resumen;
+    },
+    [refrescarInterno],
+  );
+
+  const guardarHorario = useCallback<Ctx['guardarHorario']>(async (auto, semana) => {
+    const mio = miNegocio();
+    if (!mio) return 'Tu cuenta no administra ningún negocio.';
+    const util = semana && !sinHorario(semana) ? semana : null;
+    if (util && !semanaValida(util)) return 'El horario no es válido. Revisa cada día.';
+    if (auto && !util) return 'Para que el horario sea automático, marca al menos un día en que abres.';
+    const { error } = await supabase.rpc('guardar_horario', { p_auto: auto, p_semana: util, p_texto: util ? textoHorario(util) : null });
+    if (error) return textoError(error);
+    // La base de datos pudo abrir o cerrar el negocio al guardar: se lee de nuevo para verlo
+    const r = await supabase.from('negocios').select('*').eq('id', mio.id).maybeSingle();
+    if (!r.error && r.data) dispatch({ t: 'neg', n: negocioDeFila(r.data as FilaNegocio) });
+    return null;
+  }, []);
 
   /* ───── avisos del comerciante ───── */
 
@@ -1434,7 +1729,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     // El aviso (y, si hace falta, el producto que se agotó o llegó) se leen de nuevo para verlos de inmediato.
     const [avs, prod] = await Promise.all([
       supabase.from('avisos').select('*').eq('negocio_id', mio.id),
-      a.productoId ? supabase.from('productos').select('*').eq('id', a.productoId).maybeSingle() : Promise.resolve(null),
+      a.productoId ? conColumnas((cols) => supabase.from('productos').select(cols).eq('id', a.productoId as string).maybeSingle()) : Promise.resolve(null),
     ]);
     if (!avs.error && avs.data) dispatch({ t: 'avisosDe', negocioId: mio.id, avisos: (avs.data as FilaAviso[]).map(avisoDeFila) });
     if (prod && !prod.error && prod.data) dispatch({ t: 'prod', p: productoDeFila(prod.data as FilaProducto) });
@@ -1798,6 +2093,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       editarProducto,
       eliminarProducto,
       setDisponible,
+      actualizarProductosLote,
+      agregarProductosLote,
+      guardarHorario,
       publicarAviso,
       quitarAviso,
       agregarResena,
@@ -1824,7 +2122,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [
       ready, datos, cuenta, negocio, favoritos, numFrecuentes, pedidosPendientes, estadoRed, aviso, avisar, chatsSinLeer, refrescar, negociosLibres, registrar,
       entrar, salir, cambiarModo, comprobarReclamo, abrirNegocio, soltarNegocio, recuperarPassword, restablecerPassword, actualizarCuenta,
-      cambiarPassword, actualizarNegocio, toggleFavorito, agregarProducto, editarProducto, eliminarProducto, setDisponible, publicarAviso, quitarAviso, agregarResena, borrarResena, mensajesDe,
+      cambiarPassword, actualizarNegocio, toggleFavorito, agregarProducto, editarProducto, eliminarProducto, setDisponible, actualizarProductosLote, agregarProductosLote, guardarHorario, publicarAviso, quitarAviso, agregarResena, borrarResena, mensajesDe,
       observarChat, enviarComoCliente, enviarComoNegocio, marcarLeida, carrito, agregarAlCarrito, ponerCantidad, quitarDelCarrito, vaciarCarrito,
       crearPedido, accionPedido, lineasDe, datosPagoDe, leerDatosPago, guardarDatosPago, marcarFrecuente, quitarFrecuente,
     ],

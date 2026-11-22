@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
+import { router } from 'expo-router';
 import { minutosEnPalabras, OPCIONES_APARTADO } from '../lib/pedidos';
 import { correoValido, telefonoValido, useStore } from '../store';
 import { FotoCampo } from '../ui/FotoCampo';
@@ -55,6 +56,9 @@ export default function EditarNegocio() {
 
   if (!negocio) return null;
 
+  // Si ya armó su horario por días (pantalla «Horario»), el texto que ven los clientes sale de ahí
+  const horarioPorDias = !!negocio.horarioSemana;
+
   const tocar = <A,>(set: (v: A) => void) => (v: A) => {
     set(v);
     setError('');
@@ -84,7 +88,7 @@ export default function EditarNegocio() {
       descripcion: descripcion.trim() || undefined,
       telefono: telefono.trim() ? telefono.replace(/\D/g, '') : undefined,
       correo: correo.trim() ? correo.trim().toLowerCase() : undefined,
-      horario: horario.trim() || undefined,
+      ...(horarioPorDias ? {} : { horario: horario.trim() || undefined }),
       aDomicilio,
       zonaEntrega: aDomicilio ? zona.trim() || undefined : undefined,
       direccion: ubic.direccion.trim() || undefined,
@@ -139,7 +143,25 @@ export default function EditarNegocio() {
             value={correo}
             onChangeText={tocar(setCorreo)}
           />
-          <Field label="Horario" placeholder="Ej. Lunes a sábado de 7:00 a 20:00" value={horario} onChangeText={tocar(setHorario)} />
+          {horarioPorDias ? (
+            <View style={{ gap: 8 }}>
+              <T size={14} weight={600}>
+                Horario
+              </T>
+              <T size={14} lh={1.4} color={C.greyText}>
+                {negocio.horario || 'Sin horario'}
+              </T>
+              <T size={12} lh={1.4} color={C.muted}>
+                {negocio.horarioAuto ? 'Tu negocio se abre y se cierra solo con este horario.' : 'Lo cambias en la pantalla de horario.'}
+              </T>
+              <Btn label="Cambiar mi horario" variant="outline" h={44} r={12} size={14} onPress={() => router.push('/horario')} />
+            </View>
+          ) : (
+            <View style={{ gap: 10 }}>
+              <Field label="Horario" placeholder="Ej. Lunes a sábado de 7:00 a 20:00" value={horario} onChangeText={tocar(setHorario)} />
+              <Btn label="Mejor: poner mi horario por días (se abre y cierra solo)" variant="outline" h={44} r={12} size={13} onPress={() => router.push('/horario')} />
+            </View>
+          )}
         </Card>
 
         <Card style={{ gap: 14, padding: 16 }}>

@@ -89,6 +89,7 @@ export function Btn({
   weight = 700,
   flex,
   style,
+  disabled = false,
 }: {
   label: string;
   onPress?: () => void;
@@ -99,12 +100,15 @@ export function Btn({
   weight?: 600 | 700;
   flex?: number;
   style?: StyleProp<ViewStyle>;
+  /** Se ve atenuado y no hace nada al tocarlo (por ejemplo, mientras se guarda). */
+  disabled?: boolean;
 }) {
   const v = VARIANTS[variant];
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={onPress}
+      accessibilityState={{ disabled }}
+      onPress={disabled ? undefined : onPress}
       style={({ pressed }) => [
         {
           height: h,
@@ -114,7 +118,7 @@ export function Btn({
           borderColor: v.border,
           alignItems: 'center',
           justifyContent: 'center',
-          opacity: pressed ? 0.85 : 1,
+          opacity: disabled ? 0.45 : pressed ? 0.85 : 1,
           flex,
         },
         style,

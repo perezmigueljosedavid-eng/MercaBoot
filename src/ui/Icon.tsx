@@ -73,6 +73,20 @@ const ICONS = {
   minus: { paths: ['M5 12h14'] },
   receipt: { paths: ['M6 2h12v20l-3-2-3 2-3-2-3 2z', 'M9 7h6', 'M9 11h6', 'M9 15h3'] },
   users: { paths: ['M2 21a6 6 0 0 1 12 0', 'M16 3.2a4 4 0 0 1 0 7.6', 'M22 21a6 6 0 0 0-4-5.6'], circles: [[8, 8, 4]] },
+  // Versión 2
+  tag: { paths: ['M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.83z', 'M7 7h.01'] },
+  list: { paths: ['M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6h.01', 'M3 12h.01', 'M3 18h.01'] },
+  download: { paths: ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', 'm7 10 5 5 5-5', 'M12 15V3'] },
+  upload: { paths: ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', 'm17 8-5-5-5 5', 'M12 3v12'] },
+  share: { paths: ['m8.59 13.51 6.83 3.98', 'm15.41 6.51-6.82 3.98'], circles: [[18, 5, 3], [6, 12, 3], [18, 19, 3]] },
+  shield: { paths: ['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'] },
+  scan: { paths: ['M4 7V5a1 1 0 0 1 1-1h2', 'M17 4h2a1 1 0 0 1 1 1v2', 'M20 17v2a1 1 0 0 1-1 1h-2', 'M7 20H5a1 1 0 0 1-1-1v-2', 'M8 8v8', 'M12 8v8', 'M16 8v8'] },
+  card: { paths: ['M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z', 'M2 10h20'] },
+  copy: { paths: ['M8 8h11a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z', 'M4 16V5a1 1 0 0 1 1-1h11'] },
+  undo: { paths: ['M3 7v6h6', 'M21 17a9 9 0 0 0-15-6.7L3 13'] },
+  file: { paths: ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6', 'M9 13h6', 'M9 17h6'] },
+  flag: { paths: ['M4 22V4', 'M4 4h13l-2 4 2 4H4'] },
+  ban: { paths: ['m4.9 4.9 14.2 14.2'], circles: [[12, 12, 10]] },
 } satisfies Record<string, Def>;
 
 export type IconName = keyof typeof ICONS;

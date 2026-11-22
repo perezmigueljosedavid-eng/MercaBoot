@@ -14,6 +14,7 @@ import {
 import type { CategoriaProducto, Etiqueta, TipoProducto } from '../data/tipos';
 import { clasificar, nombreIngrediente, perfilDeProducto } from '../ia/ingredientes';
 import { useBoti } from '../lib/boti';
+import { useFotoProducto } from '../lib/fotos';
 import { useStore } from '../store';
 import { textoPrecio } from '../ui/bits';
 import { Confirmar } from '../ui/Dialogo';
@@ -85,7 +86,10 @@ export default function ProductoForm() {
   const [descripcion, setDescripcion] = useState(previo?.descripcion ?? '');
   const [caracteristicas, setCaracteristicas] = useState<string[]>(previo?.caracteristicas ?? []);
   const [caracteristica, setCaracteristica] = useState('');
-  const [fotoUri, setFotoUri] = useState<string | undefined>(previo?.fotoUri);
+  // La foto que ya tenía se baja aparte; `fotoNueva` guarda lo que la persona cambió (null = no la tocó, undefined = la quitó)
+  const fotoActual = useFotoProducto(previo);
+  const [fotoNueva, setFotoNueva] = useState<string | undefined | null>(null);
+  const fotoUri = fotoNueva === null ? fotoActual : fotoNueva;
   const [etiquetas, setEtiquetas] = useState<Etiqueta[]>(perfilPrevio?.etiquetas ?? []);
   const [tocado, setTocado] = useState(!!previo?.etiquetas);
   const [error, setError] = useState('');
@@ -187,7 +191,8 @@ export default function ProductoForm() {
       ingrediente: tipo === 'ingrediente' ? c.ingrediente : undefined,
       descripcion: descripcion.trim() || undefined,
       caracteristicas: listaCar.length > 0 ? listaCar : undefined,
-      fotoUri,
+      // Solo se manda la foto si la persona la cambió: así no se vuelve a subir (ni se pierde) una foto que no tocó
+      ...(fotoNueva !== null ? { fotoUri: fotoNueva } : {}),
     };
     setGuardando(true);
     const err = previo ? await editarProducto(previo.id, datos) : await agregarProducto(datos);
@@ -207,7 +212,7 @@ export default function ProductoForm() {
       setDescripcion('');
       setCaracteristicas([]);
       setCaracteristica('');
-      setFotoUri(undefined);
+      setFotoNueva(null);
       decir('¡Producto publicado! Tus clientes ya lo ven.', { pose: 'palma', emocion: 'celebra', ms: 4000 });
       return;
     }
@@ -343,7 +348,7 @@ export default function ProductoForm() {
               Una foto, una descripción y sus características. El cliente las ve al tocar el producto, como en las tiendas en línea. Si no quieres, puedes dejarlo vacío.
             </T>
           </View>
-          <FotoCampo uri={fotoUri} nombre={nombre || 'P'} titulo="Foto del producto" onChange={setFotoUri} />
+          <FotoCampo uri={fotoUri} nombre={nombre || 'P'} titulo="Foto del producto" onChange={setFotoNueva} />
           <Field
             label="Descripción"
             placeholder="Ej. Pierna y muslo de pollo fresco, ideal para caldos y guisados."

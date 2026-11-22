@@ -2,6 +2,8 @@ import React from 'react';
 import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
 import type { TipoAviso } from '../../data/tipos';
+import { abiertoSegun, cuandoTexto, proximoCambio } from '../../lib/horario';
+import { useAhora } from '../../lib/usarAhora';
 import { avisosVigentes, ratingDe, textoRating, useStore, type EstadoRed } from '../../store';
 import { haceCuanto, textoPrecio } from '../../ui/bits';
 import { Boti } from '../../ui/Boti';
@@ -55,6 +57,7 @@ const RAPIDOS: { label: string; tipo: TipoAviso }[] = [
 
 export default function HomeComerciante() {
   const { s, negocio, actualizarNegocio, setDisponible, cuenta, numFrecuentes, pedidosPendientes, chatsSinLeer, estadoRed } = useStore();
+  const ahora = useAhora(30);
   if (!negocio || !cuenta) return null;
 
   const propios = s.productos.filter((p) => p.negocioId === negocio.id);
@@ -64,6 +67,11 @@ export default function HomeComerciante() {
   const faltaPerfil = !negocio.direccion && negocio.lat == null && !negocio.mapsUrl;
   const rating = ratingDe(negocio.id, s.resenas);
   const avisosActivos = avisosVigentes(s.avisos.filter((a) => a.negocioId === negocio.id)).length;
+  // Horario automático: lo que dice el horario ahora y cuándo cambia
+  const semana = negocio.horarioAuto ? negocio.horarioSemana : undefined;
+  const segunHorario = semana ? abiertoSegun(semana, ahora) : null;
+  const siguiente = semana ? proximoCambio(semana, ahora) : null;
+  const aMano = segunHorario != null && segunHorario !== negocio.abierto;
 
   return (
     <Screen contentStyle={{ gap: 22, paddingTop: 16, paddingHorizontal: 20, paddingBottom: 24 }}>
@@ -82,16 +90,30 @@ export default function HomeComerciante() {
       </View>
 
       {/* estado */}
-      <Card style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingVertical: 16, paddingHorizontal: 18 }}>
-        <View style={{ flex: 1, gap: 2 }}>
-          <T size={16} weight={700}>
-            Estado del negocio
-          </T>
-          <T size={13} color={C.muted}>
-            {negocio.abierto ? 'Tus clientes ven que estás abierto' : 'Tus clientes ven que estás cerrado'}
-          </T>
+      <Card style={{ gap: 12, paddingVertical: 16, paddingHorizontal: 18 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <T size={16} weight={700}>
+              Estado del negocio
+            </T>
+            <T size={13} color={C.muted}>
+              {negocio.abierto ? 'Tus clientes ven que estás abierto' : 'Tus clientes ven que estás cerrado'}
+            </T>
+          </View>
+          <Toggle big value={negocio.abierto} onChange={(v) => actualizarNegocio({ abierto: v })} label="Negocio abierto" />
         </View>
-        <Toggle big value={negocio.abierto} onChange={(v) => actualizarNegocio({ abierto: v })} label="Negocio abierto" />
+        {semana && siguiente ? (
+          <T size={12} lh={1.4} color={aMano ? C.amberText : C.greenDark}>
+            {aMano
+              ? `Lo cambiaste a mano. Tu horario vuelve a mandar ${cuandoTexto(siguiente.en, ahora)}.`
+              : `Horario automático: ${siguiente.abre ? 'abres' : 'cierras'} ${cuandoTexto(siguiente.en, ahora)}.`}
+          </T>
+        ) : null}
+        <Pressable accessibilityRole="button" onPress={() => router.push('/horario')} hitSlop={6}>
+          <T size={13} weight={700} color={C.green}>
+            {negocio.horarioSemana ? 'Ver o cambiar mi horario ›' : 'Poner mi horario y que se abra solo ›'}
+          </T>
+        </Pressable>
       </Card>
 
       {pedidosPendientes > 0 ? (

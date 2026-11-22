@@ -54,6 +54,12 @@ export interface Cuenta {
   negocioId?: string;
 }
 
+/** Un tramo del día en el que el negocio atiende: ["08:00", "14:00"]. Si el final es «antes» que el inicio, pasa de medianoche. */
+export type RangoHorario = [string, string];
+
+/** Siete días, de domingo (lugar 0) a sábado (lugar 6). Cada día: sus tramos (hasta 2) o `null` si cierra. */
+export type HorarioSemana = (RangoHorario[] | null)[];
+
 export interface Negocio {
   id: string;
   nombre: string;
@@ -78,6 +84,10 @@ export interface Negocio {
   delDirectorio?: boolean;
   /** Cuenta del comerciante. Si no existe, el negocio está en el directorio pero nadie lo ha reclamado. */
   duenoId?: string;
+  /** Horario de la semana (domingo a sábado). Si falta, el negocio solo tiene el texto de `horario`. */
+  horarioSemana?: HorarioSemana;
+  /** Si está encendido, la base de datos abre y cierra el negocio sola según `horarioSemana` (hora de Oaxaca). */
+  horarioAuto?: boolean;
   /** Cuántos minutos guarda el negocio un pedido apartado antes de soltarlo (15 a 1440). */
   apartadoMin: number;
   /** ¿Recibe pedidos por la app? (si no, solo mensajes). */
@@ -107,8 +117,12 @@ export interface Producto {
   descripcion?: string;
   /** Características importantes que ve el cliente, por ejemplo «Ideal para caldos» (máx. 6). */
   caracteristicas?: string[];
-  /** Foto del producto (opcional); se guarda como imagen dentro del texto, igual que el logo. */
-  fotoUri?: string;
+  /**
+   * ¿Tiene foto? La foto en sí NO viaja con la lista de productos (pesa unos 22 KB cada una): se baja solo cuando se va
+   * a ver, con `useFotoProducto` (src/lib/fotos.ts). `fotoHuella` cambia cuando cambia la foto.
+   */
+  tieneFoto?: boolean;
+  fotoHuella?: string;
   /** Se puede pedir en medios: ½, 1½, 2½… Si falta, la app lo deduce de la unidad (kg y litros sí). */
   medios?: boolean;
   /** Existencias (opcional): si el comerciante no las lleva, vale `undefined` y no hay límite. */

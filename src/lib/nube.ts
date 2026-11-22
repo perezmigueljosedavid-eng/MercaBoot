@@ -18,6 +18,7 @@ import type {
   TipoMensaje,
   TipoProducto,
 } from '../data/tipos';
+import { leerSemana } from './horario';
 
 /**
  * Traducción entre las tablas de la nube (supabase/esquema.sql, con_guiones_bajos) y los tipos de la app,
@@ -55,6 +56,9 @@ export interface FilaNegocio {
   apartado_minutos: number;
   acepta_pedidos: boolean;
   acepta_transferencia: boolean;
+  /** Horario automático (pueden faltar en copias guardadas de versiones anteriores). */
+  horario_auto?: boolean | null;
+  horario_semana?: unknown;
   creado: string;
 }
 
@@ -77,8 +81,37 @@ export interface FilaProducto {
   /** Detalle que ve el cliente (pueden faltar en copias guardadas de versiones anteriores). */
   descripcion?: string | null;
   caracteristicas?: string[] | null;
+  /** La foto solo viaja cuando se pide (ver `COLUMNAS_PRODUCTO`); `foto_huella` dice si hay y cuándo cambió. */
   foto_uri?: string | null;
+  foto_huella?: string | null;
   medios?: boolean | null;
+}
+
+/**
+ * Las columnas de un producto SIN la foto (que pesa unos 22 KB por producto). La lista de productos se lee con estas
+ * columnas y cada foto se baja aparte, solo cuando se va a ver (src/lib/fotos.ts).
+ */
+export const COLUMNAS_PRODUCTO =
+  'id,negocio_id,nombre,precio,unidad,disponible,categoria,por_encargo,cantidad,apartado,actualizado,tipo,etiquetas,ingrediente,descripcion,caracteristicas,medios,foto_huella';
+
+let selectProductos: string = COLUMNAS_PRODUCTO;
+/** Qué columnas pedir: las de arriba o, si esta base de datos todavía no tiene `foto_huella`, todas. */
+export const columnasProducto = () => selectProductos;
+export function usarTodasLasColumnasProducto() {
+  selectProductos = '*';
+}
+/** ¿El error dice que falta una columna (la base de datos todavía no tiene la actualización de la versión 2)? */
+export function esColumnaFaltante(e: unknown): boolean {
+  const x = e as { code?: string; message?: string } | null;
+  return !!x && (x.code === '42703' || /foto_huella/.test(String(x.message ?? '')));
+}
+
+/** Una huella corta y barata de una foto (para las fotos que llegan sin la huella de la base de datos). */
+export function huellaLocal(uri: string): string {
+  let h = 2166136261;
+  const paso = Math.max(1, Math.floor(uri.length / 400));
+  for (let i = 0; i < uri.length; i += paso) h = Math.imul(h ^ uri.charCodeAt(i), 16777619) >>> 0;
+  return `l${uri.length.toString(36)}${h.toString(36)}`;
 }
 
 export interface FilaAviso {
@@ -219,6 +252,8 @@ export const negocioDeFila = (f: FilaNegocio): Negocio => ({
   apartadoMin: f.apartado_minutos ?? 60,
   aceptaPedidos: f.acepta_pedidos ?? true,
   aceptaTransferencia: !!f.acepta_transferencia,
+  horarioAuto: !!f.horario_auto,
+  horarioSemana: leerSemana(f.horario_semana),
   creado: ms(f.creado),
 });
 
@@ -245,7 +280,9 @@ export const productoDeFila = (f: FilaProducto): Producto => {
     porEncargo: !!f.por_encargo,
     descripcion: txt(f.descripcion),
     caracteristicas: f.caracteristicas && f.caracteristicas.length > 0 ? f.caracteristicas.filter((c) => typeof c === 'string' && c.trim()).slice(0, 6) : undefined,
-    fotoUri: txt(f.foto_uri),
+    // La foto no viaja con la lista: solo se sabe si hay y cuándo cambió (la foto se baja aparte)
+    tieneFoto: !!(f.foto_huella || f.foto_uri),
+    fotoHuella: txt(f.foto_huella) ?? (f.foto_uri ? huellaLocal(f.foto_uri) : undefined),
     medios: f.medios == null ? undefined : !!f.medios,
     cantidad: num(f.cantidad),
     apartado: num(f.apartado) ?? 0,

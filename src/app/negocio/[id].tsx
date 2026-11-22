@@ -1,16 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Image, Modal, Pressable, ScrollView, View } from 'react-native';
+import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { nombreCategoria, textoEtiquetas } from '../../data/contenido';
+import type { CategoriaProducto } from '../../data/tipos';
 import { perfilDeProducto } from '../../ia/ingredientes';
 import { abrirMapas, abrirTelefono, distanciaA, etiquetaDistancia } from '../../lib/geo';
 import { useBoti } from '../../lib/boti';
 import { useUbicacion } from '../../lib/ubicacion';
+import { cuandoTexto, proximoCambio } from '../../lib/horario';
+import { DESDE_CUANTOS, filtrarProductos, POR_PAGINA } from '../../lib/listaProductos';
 import { cantidadTexto, dinero, disponibleParaPedir, minutosEnPalabras, pasoCantidad, sePuedePedir } from '../../lib/pedidos';
 import { avisosVigentes, OTRO_NEGOCIO, ratingDe, textoRating, useStore } from '../../store';
 import { AvisoFila, haceCuanto, textoPrecio } from '../../ui/bits';
+import { BuscadorProductos, VerMas } from '../../ui/BuscadorProductos';
 import { Confirmar } from '../../ui/Dialogo';
+import { FotoProducto } from '../../ui/FotoProducto';
 import { Icon, IconName } from '../../ui/Icon';
 import { Badge, BackBtn, Btn, Card, Group, OpenDot, Screen, Tag } from '../../ui/kit';
 import { Logo } from '../../ui/Logo';
@@ -44,6 +49,10 @@ export default function Negocio() {
   const [pestana, setPestana] = useState<Pestana>('productos');
   // Producto abierto en la hoja de detalle (foto, descripción y características).
   const [detalleId, setDetalleId] = useState<string | null>(null);
+  // Tiendas con muchos productos: buscador, categoría y «Ver más»
+  const [busqueda, setBusqueda] = useState('');
+  const [categoria, setCategoria] = useState<CategoriaProducto | null>(null);
+  const [limite, setLimite] = useState(POR_PAGINA);
 
   // El aviso se quita solo.
   useEffect(() => {
@@ -54,6 +63,7 @@ export default function Negocio() {
 
   const n = s.negocios.find((x) => x.id === id);
   const productos = useMemo(() => s.productos.filter((p) => p.negocioId === id), [s.productos, id]);
+  const filtrados = useMemo(() => filtrarProductos(productos, busqueda, categoria), [productos, busqueda, categoria]);
   const avisos = useMemo(() => avisosVigentes(s.avisos.filter((a) => a.negocioId === id)), [s.avisos, id]);
   const resenas = useMemo(() => s.resenas.filter((x) => x.negocioId === id), [s.resenas, id]);
 
@@ -86,8 +96,13 @@ export default function Negocio() {
     else if (r) setMensaje(r);
     else decir('¡Anotado! Ya está en tu carrito.', { pose: 'caja', emocion: 'brinco', ms: 3500 });
   };
-  const disponibles = productos.filter((p) => p.disponible);
-  const agotados = productos.filter((p) => !p.disponible);
+  // Primero lo que hay y luego lo agotado; se dibujan de a POR_PAGINA para que una tienda grande no haga lenta la pantalla
+  const ordenados = [...filtrados.filter((p) => p.disponible), ...filtrados.filter((p) => !p.disponible)];
+  const visibles = ordenados.slice(0, limite);
+  const disponibles = visibles.filter((p) => p.disponible);
+  const agotados = visibles.filter((p) => !p.disponible);
+  const restantes = ordenados.length - visibles.length;
+  const filtrando = !!busqueda.trim() || categoria !== null;
   const ultima = productos.reduce((m, p) => Math.max(m, p.actualizado), 0);
   const dist = etiquetaDistancia(distanciaA(n, coords));
 
@@ -104,7 +119,7 @@ export default function Negocio() {
           onPress={() => setDetalleId(p.id)}
           style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}
         >
-          {p.fotoUri ? <Image source={{ uri: p.fotoUri }} style={{ width: 52, height: 52, borderRadius: 12, backgroundColor: C.bg }} /> : null}
+          <FotoProducto producto={p} size={52} r={12} />
           <View style={{ flex: 1, gap: 3 }}>
             <T size={15} weight={600} color={p.disponible ? C.ink : C.muted}>
               {p.nombre}
@@ -206,6 +221,12 @@ export default function Negocio() {
         <View style={{ gap: 8 }}>
           <Dato icono="pin" texto={[n.direccion, dist].filter(Boolean).join(' · ') || 'Dirección sin registrar. Usa «Cómo llegar» para ver el mapa.'} />
           {n.horario ? <Dato icono="clock" texto={n.horario} /> : null}
+          {reclamado && !n.abierto && n.horarioAuto && n.horarioSemana
+            ? (() => {
+                const c = proximoCambio(n.horarioSemana);
+                return c?.abre ? <Dato icono="clock" texto={`Abre ${cuandoTexto(c.en)}`} /> : null;
+              })()
+            : null}
           {n.telefono ? <Dato icono="phone" texto={n.telefono} /> : null}
           {n.aDomicilio && n.zonaEntrega ? <Dato icono="navigation" texto={`Entrega a domicilio: ${n.zonaEntrega}`} /> : null}
         </View>
@@ -348,6 +369,27 @@ export default function Negocio() {
                   Productos actualizados {haceCuanto(ultima)}
                 </T>
               ) : null}
+              {productos.length > DESDE_CUANTOS ? (
+                <BuscadorProductos
+                  productos={productos}
+                  busqueda={busqueda}
+                  onBusqueda={(t) => {
+                    setBusqueda(t);
+                    setLimite(POR_PAGINA);
+                  }}
+                  categoria={categoria}
+                  onCategoria={(c) => {
+                    setCategoria(c);
+                    setLimite(POR_PAGINA);
+                  }}
+                  placeholder={`Buscar en ${n.nombre}`}
+                />
+              ) : null}
+              {filtrando && ordenados.length === 0 ? (
+                <T size={14} lh={1.45} color={C.muted}>
+                  No encontramos productos con eso. Prueba con otra palabra o pregúntale al negocio por el chat.
+                </T>
+              ) : null}
               {disponibles.length ? <Group>{disponibles.map(fila)}</Group> : null}
               {agotados.length ? (
                 <>
@@ -357,6 +399,7 @@ export default function Negocio() {
                   <Group>{agotados.map(fila)}</Group>
                 </>
               ) : null}
+              {restantes > 0 ? <VerMas restantes={restantes} onPress={() => setLimite((l) => l + POR_PAGINA)} /> : null}
             </View>
           )
         ) : null}
@@ -481,9 +524,7 @@ export default function Negocio() {
               <View style={{ width: 44, height: 5, borderRadius: 3, backgroundColor: C.input }} />
             </View>
             <ScrollView contentContainerStyle={{ padding: 20, gap: 14 }}>
-              {p.fotoUri ? (
-                <Image source={{ uri: p.fotoUri }} style={{ width: '100%', aspectRatio: 1.6, borderRadius: 18, backgroundColor: C.bg }} resizeMode="cover" accessibilityLabel={`Foto de ${p.nombre}`} />
-              ) : null}
+              <FotoProducto producto={p} ancho />
               <View style={{ gap: 6 }}>
                 <T size={21} weight={800} lh={1.25}>
                   {p.nombre}

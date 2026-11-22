@@ -1,32 +1,68 @@
-import React, { useState } from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
 import { nombreCategoria, textoEtiquetas } from '../../data/contenido';
+import type { CategoriaProducto } from '../../data/tipos';
 import { perfilDeProducto } from '../../ia/ingredientes';
+import { DESDE_CUANTOS, filtrarProductos, POR_PAGINA } from '../../lib/listaProductos';
 import { cantidadTexto } from '../../lib/pedidos';
-import { norm } from '../../lib/texto';
 import { useStore } from '../../store';
 import { haceCuanto, textoPrecio } from '../../ui/bits';
-import { Icon } from '../../ui/Icon';
+import { BuscadorProductos, VerMas } from '../../ui/BuscadorProductos';
+import { FotoProducto } from '../../ui/FotoProducto';
+import { Icon, IconName } from '../../ui/Icon';
 import { Card, Chip, Group, Screen } from '../../ui/kit';
 import { T } from '../../ui/T';
-import { C, FONT } from '../../ui/theme';
+import { C } from '../../ui/theme';
 
 type Filtro = 'todos' | 'hay' | 'agotado';
+
+/** Un atajo a una herramienta para tiendas con muchos productos. */
+function Herramienta({ icono, titulo, texto, ruta }: { icono: IconName; titulo: string; texto: string; ruta: string }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${titulo}. ${texto}`}
+      onPress={() => router.push(ruta as never)}
+      style={({ pressed }) => ({ flexBasis: '48%', flexGrow: 1, opacity: pressed ? 0.75 : 1 })}
+    >
+      <Card r={16} style={{ gap: 6, padding: 14 }}>
+        <View style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: C.greenTint, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name={icono} size={19} color={C.green} />
+        </View>
+        <T size={14} weight={700}>
+          {titulo}
+        </T>
+        <T size={12} lh={1.35} color={C.muted}>
+          {texto}
+        </T>
+      </Card>
+    </Pressable>
+  );
+}
 
 export default function MisProductos() {
   const { s, negocio, setDisponible } = useStore();
   const [q, setQ] = useState('');
+  const [categoria, setCategoria] = useState<CategoriaProducto | null>(null);
   const [filtro, setFiltro] = useState<Filtro>('todos');
+  const [limite, setLimite] = useState(POR_PAGINA);
+
+  const propios = useMemo(() => s.productos.filter((p) => negocio && p.negocioId === negocio.id), [s.productos, negocio]);
+  const lista = useMemo(
+    () => filtrarProductos(propios, q, categoria).filter((p) => (filtro === 'todos' ? true : filtro === 'hay' ? p.disponible : !p.disponible)),
+    [propios, q, categoria, filtro],
+  );
   if (!negocio) return null;
 
-  const propios = s.productos.filter((p) => p.negocioId === negocio.id);
-  const lista = propios
-    .filter((p) => (filtro === 'todos' ? true : filtro === 'hay' ? p.disponible : !p.disponible))
-    .filter((p) => !q.trim() || norm(p.nombre).includes(norm(q.trim())))
-    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   const hay = propios.filter((p) => p.disponible).length;
   const agotados = propios.length - hay;
+  const visibles = lista.slice(0, limite);
+  const restantes = lista.length - visibles.length;
+  const cambiarFiltro = (f: Filtro) => {
+    setFiltro(f);
+    setLimite(POR_PAGINA);
+  };
 
   return (
     <Screen contentStyle={{ gap: 16, paddingTop: 16, paddingHorizontal: 20, paddingBottom: 24 }}>
@@ -53,25 +89,35 @@ export default function MisProductos() {
         </Pressable>
       </View>
 
-      {propios.length > 4 ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, height: 48, paddingHorizontal: 16, borderRadius: 14, backgroundColor: C.white, borderWidth: 1, borderColor: C.line }}>
-          <Icon name="search" size={18} color={C.muted} />
-          <TextInput
-            value={q}
-            onChangeText={setQ}
-            placeholder="Buscar en mis productos"
-            placeholderTextColor={C.placeholder}
-            accessibilityLabel="Buscar en mis productos"
-            style={{ flex: 1, minWidth: 0, fontFamily: FONT[400], fontSize: 15, color: C.ink, padding: 0 }}
-          />
-        </View>
+      {/* Para tiendas con muchos productos: nada se hace uno por uno */}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+        {propios.length > 0 ? <Herramienta icono="tag" titulo="Precios de hoy" texto="Cambia muchos precios o marca lo que se acabó, todo en una pantalla." ruta="/precios-de-hoy" /> : null}
+        <Herramienta icono="box" titulo="Catálogo Mercaboot" texto="Elige de una lista lo que vendes y se agrega de golpe, sin escribir uno por uno." ruta="/catalogo" />
+        <Herramienta icono="clock" titulo="Horario" texto="Pon tus horas una vez y la app abre y cierra tu negocio sola." ruta="/horario" />
+      </View>
+
+      {propios.length > DESDE_CUANTOS ? (
+        <BuscadorProductos
+          productos={propios}
+          busqueda={q}
+          onBusqueda={(t) => {
+            setQ(t);
+            setLimite(POR_PAGINA);
+          }}
+          categoria={categoria}
+          onCategoria={(c) => {
+            setCategoria(c);
+            setLimite(POR_PAGINA);
+          }}
+          placeholder="Buscar en mis productos"
+        />
       ) : null}
 
       {propios.length ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          <Chip label="Todos" h={38} px={14} size={13} active={filtro === 'todos'} onPress={() => setFiltro('todos')} />
-          <Chip label="Disponibles" h={38} px={14} size={13} active={filtro === 'hay'} onPress={() => setFiltro('hay')} />
-          <Chip label="Agotados" h={38} px={14} size={13} active={filtro === 'agotado'} onPress={() => setFiltro('agotado')} />
+          <Chip label="Todos" h={38} px={14} size={13} active={filtro === 'todos'} onPress={() => cambiarFiltro('todos')} />
+          <Chip label="Disponibles" h={38} px={14} size={13} active={filtro === 'hay'} onPress={() => cambiarFiltro('hay')} />
+          <Chip label="Agotados" h={38} px={14} size={13} active={filtro === 'agotado'} onPress={() => cambiarFiltro('agotado')} />
         </View>
       ) : null}
 
@@ -81,7 +127,7 @@ export default function MisProductos() {
             Aún no has publicado productos
           </T>
           <T size={14} lh={1.45} color={C.muted}>
-            No hay lista fija: escribe el nombre de cada cosa que vendes (por ejemplo «Quesillo», «Fresas con crema», «Pastel de tres leches» o «Comida corrida»), pon el precio y cómo se vende (kilo, vaso, rebanada, porción…) y marca si hay o ya se acabó. Los clientes y el asistente lo verán al momento.
+            Puedes escribir cada cosa que vendes (por ejemplo «Quesillo», «Fresas con crema» o «Comida corrida»), o usar el «Catálogo Mercaboot» de arriba para agregar de golpe lo más común de tu tipo de negocio. Después solo ajustas los precios y marcas si hay o ya se acabó. Los clientes y el asistente lo verán al momento.
           </T>
         </Card>
       ) : lista.length === 0 ? (
@@ -90,30 +136,33 @@ export default function MisProductos() {
         </T>
       ) : (
         <Group>
-          {lista.map((p) => (
+          {visibles.map((p) => (
             <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingLeft: 14, paddingRight: 12 }}>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Editar ${p.nombre}`}
                 onPress={() => router.push({ pathname: '/producto-form', params: { id: p.id } })}
-                style={{ flex: 1, gap: 2 }}
+                style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0 }}
               >
-                <T size={15} weight={600} color={p.disponible ? C.ink : C.muted}>
-                  {p.nombre}
-                </T>
-                <T size={13} color={C.muted}>
-                  {textoPrecio(p.precio, p.unidad)}
-                  {p.porEncargo ? ' · por encargo' : ''}
-                </T>
-                {p.cantidad != null ? (
-                  <T size={12} weight={600} color={p.cantidad <= 0 ? C.red : p.apartado > 0 ? C.amberText : C.greyText}>
-                    Existencias: {cantidadTexto(p.cantidad)}
-                    {p.apartado > 0 ? ` · ${cantidadTexto(p.apartado)} apartado${p.apartado === 1 ? '' : 's'}` : ''}
+                <FotoProducto producto={p} size={44} r={11} />
+                <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
+                  <T size={15} weight={600} color={p.disponible ? C.ink : C.muted}>
+                    {p.nombre}
                   </T>
-                ) : null}
-                <T size={12} color={C.muted} numberOfLines={1}>
-                  {[nombreCategoria(p.categoria), textoEtiquetas(perfilDeProducto(p, negocio.giro).etiquetas, 3)].filter(Boolean).join(' · ')} · {haceCuanto(p.actualizado)}
-                </T>
+                  <T size={13} color={C.muted}>
+                    {textoPrecio(p.precio, p.unidad)}
+                    {p.porEncargo ? ' · por encargo' : ''}
+                  </T>
+                  {p.cantidad != null ? (
+                    <T size={12} weight={600} color={p.cantidad <= 0 ? C.red : p.apartado > 0 ? C.amberText : C.greyText}>
+                      Existencias: {cantidadTexto(p.cantidad)}
+                      {p.apartado > 0 ? ` · ${cantidadTexto(p.apartado)} apartado${p.apartado === 1 ? '' : 's'}` : ''}
+                    </T>
+                  ) : null}
+                  <T size={12} color={C.muted} numberOfLines={1}>
+                    {[nombreCategoria(p.categoria), textoEtiquetas(perfilDeProducto(p, negocio.giro).etiquetas, 3)].filter(Boolean).join(' · ')} · {haceCuanto(p.actualizado)}
+                  </T>
+                </View>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
@@ -129,6 +178,7 @@ export default function MisProductos() {
           ))}
         </Group>
       )}
+      {restantes > 0 ? <VerMas restantes={restantes} onPress={() => setLimite((l) => l + POR_PAGINA)} /> : null}
     </Screen>
   );
 }
