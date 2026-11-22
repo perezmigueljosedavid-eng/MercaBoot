@@ -66,6 +66,7 @@ import { guardarFoto, quitarFoto, vaciarFotos } from './lib/fotos';
 import { sinHorario, semanaValida, textoHorario } from './lib/horario';
 import { avisoDeCambio, cantidadTexto, disponibleParaPedir, esActivo, pasoCantidad, redondear, totales } from './lib/pedidos';
 import { trocear, type CambioDeProducto } from './lib/precios';
+import { olvidarBloqueos } from './lib/seguridad';
 import { supabase } from './lib/supabase';
 
 /**
@@ -1026,6 +1027,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         olvidarAlertas();
         olvidarBusquedas();
         olvidarCodigos();
+        olvidarBloqueos();
         setModo(null);
         setEstadoRed('conectando');
         setLocalListo(true);

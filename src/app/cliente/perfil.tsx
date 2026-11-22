@@ -112,6 +112,7 @@ export default function PerfilCliente() {
         <Fila texto="Mis reseñas" detalle={String(resenas)} onPress={() => router.push('/mis-resenas')} />
         <Fila texto="Mi ubicación" detalle={textoUbicacion} onPress={actualizarUbicacion} />
         <Fila texto="Avisos al teléfono" onPress={() => router.push('/avisos-telefono')} />
+        <Fila texto="Personas bloqueadas" onPress={() => router.push('/bloqueados')} />
         <Fila texto="Ayuda" onPress={() => router.push('/ayuda')} />
       </Group>
       <Btn

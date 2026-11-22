@@ -143,6 +143,7 @@ export default function PerfilComerciante() {
         <Fila texto="Así ven mi negocio los clientes" onPress={() => router.push(`/negocio/${negocio.id}`)} />
         <Fila texto="Reseñas de mis clientes" onPress={() => router.push(`/negocio/${negocio.id}`)} />
         <Fila texto="Avisos al teléfono" onPress={() => router.push('/avisos-telefono')} />
+        <Fila texto="Personas bloqueadas" onPress={() => router.push('/bloqueados')} />
         <Fila texto="Ayuda" onPress={() => router.push('/ayuda')} />
       </Group>
 

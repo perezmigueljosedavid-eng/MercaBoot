@@ -7,12 +7,16 @@ import type { Mensaje } from '../data/tipos';
 import { abrirMapas } from '../lib/geo';
 import { horaBonita } from '../lib/horario';
 import { dinero, esActivo, etiquetaEstado } from '../lib/pedidos';
+import { bloquear, cargarBloqueos, desbloquear, useBloqueados } from '../lib/seguridad';
 import { sinLeer, useStore } from '../store';
 import { fechaCorta } from './bits';
-import { Icon } from './Icon';
+import { Confirmar } from './Dialogo';
+import { Hoja } from './Hoja';
+import { Icon, type IconName } from './Icon';
 import { BackBtn, Btn, Card, Chip, Screen } from './kit';
 import { Logo } from './Logo';
 import { Contador, EstadoTag } from './pedidos';
+import { ReportarHoja, type ObjetoReportado } from './Reportar';
 import { SelectorHora } from './SelectorHora';
 import { T } from './T';
 import { C, FONT } from './theme';
@@ -32,10 +36,13 @@ function etiquetaDia(ms: number) {
   return fechaCorta(ms);
 }
 
-function Burbuja({ m, mio }: { m: Mensaje; mio: boolean }) {
+function Burbuja({ m, mio, alMantener }: { m: Mensaje; mio: boolean; alMantener?: () => void }) {
   return (
-    <View
+    <Pressable
       accessibilityLabel={`${mio ? 'Tú' : 'Ellos'}: ${m.texto}`}
+      accessibilityHint={alMantener ? 'Mantén presionado para reportar este mensaje' : undefined}
+      onLongPress={alMantener}
+      delayLongPress={450}
       style={{
         alignSelf: mio ? 'flex-end' : 'flex-start',
         maxWidth: '78%',
@@ -58,7 +65,33 @@ function Burbuja({ m, mio }: { m: Mensaje; mio: boolean }) {
       <T size={10} color={mio ? '#CFE6D9' : C.muted} style={{ alignSelf: 'flex-end' }}>
         {m.pendiente ? 'Enviando…' : hora(m.creado)}
       </T>
-    </View>
+    </Pressable>
+  );
+}
+
+/** Una opción del menú de la conversación (reportar, bloquear…). */
+function FilaMenu({ icono, texto, ayuda, peligro = false, onPress }: { icono: IconName; texto: string; ayuda?: string; peligro?: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={ayuda ? `${texto}. ${ayuda}` : texto}
+      onPress={onPress}
+      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 10, opacity: pressed ? 0.7 : 1 })}
+    >
+      <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: peligro ? C.redTint : C.grey, alignItems: 'center', justifyContent: 'center' }}>
+        <Icon name={icono} size={20} color={peligro ? C.red : C.ink} />
+      </View>
+      <View style={{ flex: 1, gap: 1 }}>
+        <T size={15} weight={700} color={peligro ? C.red : C.ink}>
+          {texto}
+        </T>
+        {ayuda ? (
+          <T size={12.5} lh={1.35} color={C.muted}>
+            {ayuda}
+          </T>
+        ) : null}
+      </View>
+    </Pressable>
   );
 }
 
@@ -118,12 +151,18 @@ function TarjetaPedido({ m, mio }: { m: Mensaje; mio: boolean }) {
  * modo "cliente": id = id del negocio · modo "comerciante": id = id de la conversación.
  */
 export function ChatView({ modo, id, showBack }: { modo: 'cliente' | 'comerciante'; id: string; showBack: boolean }) {
-  const { s, cuenta, negocio: miNegocio, mensajesDe, observarChat, enviarComoCliente, enviarComoNegocio, marcarLeida } = useStore();
+  const { s, cuenta, negocio: miNegocio, mensajesDe, observarChat, enviarComoCliente, enviarComoNegocio, marcarLeida, refrescar } = useStore();
   const insets = useSafeAreaInsets();
   const [texto, setTexto] = useState('');
   const [error, setError] = useState('');
   /** El comerciante elige a qué hora llega algo («Llega a las…»). */
   const [eligiendoHora, setEligiendoHora] = useState(false);
+  /** Menú de la conversación (reportar / bloquear), lo que se está reportando y la confirmación de bloquear. */
+  const [menu, setMenu] = useState(false);
+  const [reportando, setReportando] = useState<ObjetoReportado | null>(null);
+  const [confirmandoBloqueo, setConfirmandoBloqueo] = useState(false);
+  const [ocupado, setOcupado] = useState(false);
+  const bloqueados = useBloqueados();
   const scroll = useRef<ScrollViewInstance>(null);
 
   const conv =
@@ -143,6 +182,11 @@ export function ChatView({ modo, id, showBack }: { modo: 'cliente' | 'comerciant
   useEffect(() => {
     if (convId && hayNoLeidos) marcarLeida(convId);
   }, [convId, hayNoLeidos, marcarLeida]);
+
+  // A quién tiene bloqueado esta persona (para avisarle en el chat y dejarla desbloquear)
+  useEffect(() => {
+    void cargarBloqueos();
+  }, []);
 
   if (!cuenta || !negocio || (modo === 'comerciante' && !conv)) {
     return (
@@ -166,6 +210,30 @@ export function ChatView({ modo, id, showBack }: { modo: 'cliente' | 'comerciant
   const rapidas = modo === 'cliente' ? RESPUESTAS_RAPIDAS_CLIENTE : RESPUESTAS_RAPIDAS_COMERCIANTE;
   const sinCuentaNegocio = modo === 'cliente' && !negocio.duenoId;
   const esMiNegocio = modo === 'cliente' && negocio.duenoId === cuenta.id;
+  /** La otra persona de esta conversación: el dueño del negocio (si eres cliente) o el cliente (si eres el comerciante). */
+  const otroId = modo === 'cliente' ? negocio.duenoId : conv?.clienteId;
+  const puedeModerar = !!otroId && otroId !== cuenta.id && !sinCuentaNegocio && !esMiNegocio;
+  const yoBloquee = !!otroId && bloqueados.some((b) => b.usuarioId === otroId);
+
+  async function bloquearAhora() {
+    if (!otroId || ocupado) return;
+    setConfirmandoBloqueo(false);
+    setOcupado(true);
+    setError('');
+    const err = await bloquear(otroId, nombre);
+    setOcupado(false);
+    if (err) setError(err);
+    else void refrescar(); // al bloquear a un negocio, deja de estar en tus favoritos
+  }
+
+  async function desbloquearAhora() {
+    if (!otroId || ocupado) return;
+    setOcupado(true);
+    setError('');
+    const err = await desbloquear(otroId);
+    setOcupado(false);
+    if (err) setError(err);
+  }
 
   async function enviar(t: string) {
     const limpio = t.trim();
@@ -218,6 +286,17 @@ export function ChatView({ modo, id, showBack }: { modo: 'cliente' | 'comerciant
             <T size={12} weight={700} color={trato ? C.amberText : C.greyText}>
               {trato ? '⭐ Frecuente' : '☆ Frecuente'}
             </T>
+          </Pressable>
+        ) : null}
+        {puedeModerar ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Más opciones: reportar o bloquear"
+            onPress={() => setMenu(true)}
+            hitSlop={6}
+            style={{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Icon name="more" size={22} color={C.ink} />
           </Pressable>
         ) : null}
       </View>
@@ -275,14 +354,30 @@ export function ChatView({ modo, id, showBack }: { modo: 'cliente' | 'comerciant
               ) : m.tipo === 'pedido' ? (
                 <TarjetaPedido m={m} mio={m.autorId === cuenta.id} />
               ) : (
-                <Burbuja m={m} mio={m.autorId === cuenta.id} />
+                <Burbuja
+                  m={m}
+                  mio={m.autorId === cuenta.id}
+                  alMantener={m.autorId !== cuenta.id && !m.pendiente && puedeModerar ? () => setReportando({ tipo: 'mensaje', id: m.id, queSe: 'este mensaje' }) : undefined}
+                />
               )}
             </React.Fragment>
           );
         })}
       </ScrollView>
 
-      {sinCuentaNegocio || esMiNegocio ? (
+      {yoBloquee ? (
+        <View style={{ gap: 10, padding: 16, paddingBottom: 16 + insets.bottom, backgroundColor: C.white, borderTopWidth: 1, borderTopColor: C.line }}>
+          <T size={14} lh={1.45} color={C.muted}>
+            Bloqueaste a {nombre}. No pueden escribirse ni hacerse pedidos nuevos mientras esté bloqueado{modo === 'cliente' ? ', y dejaste de seguir este negocio' : ''}.
+          </T>
+          {error ? (
+            <T size={13} weight={600} color={C.red} accessibilityRole="alert">
+              {error}
+            </T>
+          ) : null}
+          <Btn label={ocupado ? 'Desbloqueando…' : 'Desbloquear'} variant="outline" h={46} r={12} size={15} disabled={ocupado} onPress={() => void desbloquearAhora()} />
+        </View>
+      ) : sinCuentaNegocio || esMiNegocio ? (
         <View style={{ gap: 10, padding: 16, paddingBottom: 16 + insets.bottom, backgroundColor: C.white, borderTopWidth: 1, borderTopColor: C.line }}>
           <Btn label="Cómo llegar" h={46} r={12} size={15} onPress={() => abrirMapas(negocio)} />
         </View>
@@ -337,6 +432,60 @@ export function ChatView({ modo, id, showBack }: { modo: 'cliente' | 'comerciant
           </View>
         </View>
       )}
+      <Hoja visible={menu} titulo={nombre} onCerrar={() => setMenu(false)} alto="70%">
+        <View style={{ paddingHorizontal: 20, paddingBottom: 8, gap: 2 }}>
+          {conv && otroId ? (
+            <FilaMenu
+              icono="flag"
+              texto={modo === 'cliente' ? 'Reportar al dueño' : 'Reportar a este cliente'}
+              ayuda="Por cómo escribió o te trató"
+              onPress={() => {
+                setMenu(false);
+                setReportando({ tipo: 'usuario', id: otroId, queSe: modo === 'cliente' ? 'esta persona' : 'este cliente' });
+              }}
+            />
+          ) : null}
+          {modo === 'cliente' ? (
+            <FilaMenu
+              icono="store"
+              texto="Reportar el negocio"
+              ayuda="Si la tienda o sus productos son falsos o engañan"
+              onPress={() => {
+                setMenu(false);
+                setReportando({ tipo: 'negocio', id: negocio.id, queSe: 'este negocio' });
+              }}
+            />
+          ) : null}
+          <FilaMenu
+            icono="ban"
+            peligro={!yoBloquee}
+            texto={yoBloquee ? 'Desbloquear' : modo === 'cliente' ? 'Bloquear este negocio' : 'Bloquear a este cliente'}
+            ayuda={yoBloquee ? undefined : 'Dejan de poder escribirse. No se le avisa'}
+            onPress={() => {
+              setMenu(false);
+              if (yoBloquee) void desbloquearAhora();
+              else setConfirmandoBloqueo(true);
+            }}
+          />
+          <T size={12} lh={1.4} color={C.muted} style={{ marginTop: 6 }}>
+            Para reportar un mensaje en concreto, mantén el dedo sobre él.
+          </T>
+        </View>
+      </Hoja>
+      <ReportarHoja objeto={reportando} onCerrar={() => setReportando(null)} />
+      <Confirmar
+        visible={confirmandoBloqueo}
+        titulo={`¿Bloquear a ${nombre}?`}
+        texto={
+          modo === 'cliente'
+            ? 'Ya no podrán escribirse ni hacerse pedidos nuevos, y dejarás de seguir este negocio. No se le avisa. Cuando quieras lo desbloqueas desde tu perfil.'
+            : 'Este cliente ya no podrá escribirte ni hacerte pedidos nuevos. No se le avisa. Los pedidos que ya están en marcha se pueden terminar. Cuando quieras lo desbloqueas desde tu perfil.'
+        }
+        confirmar="Bloquear"
+        peligro
+        onConfirmar={() => void bloquearAhora()}
+        onCancelar={() => setConfirmandoBloqueo(false)}
+      />
       {modo === 'comerciante' ? (
         <SelectorHora
           visible={eligiendoHora}

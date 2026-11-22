@@ -20,6 +20,7 @@ import { Icon, IconName } from '../../ui/Icon';
 import { Badge, BackBtn, Btn, Card, Group, OpenDot, Screen, Tag } from '../../ui/kit';
 import { Logo } from '../../ui/Logo';
 import { Stepper } from '../../ui/pedidos';
+import { ReportarHoja, type ObjetoReportado } from '../../ui/Reportar';
 import { T } from '../../ui/T';
 import { C } from '../../ui/theme';
 
@@ -53,6 +54,8 @@ export default function Negocio() {
   const [busqueda, setBusqueda] = useState('');
   const [categoria, setCategoria] = useState<CategoriaProducto | null>(null);
   const [limite, setLimite] = useState(POR_PAGINA);
+  // Lo que se está reportando (una reseña o este negocio)
+  const [reportando, setReportando] = useState<ObjetoReportado | null>(null);
 
   // El aviso se quita solo.
   useEffect(() => {
@@ -462,10 +465,39 @@ export default function Negocio() {
                       {x.comentario}
                     </T>
                   ) : null}
+                  {cuenta && x.autorId !== cuenta.id ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Reportar la reseña de ${x.autor}`}
+                      onPress={() => setReportando({ tipo: 'resena', id: x.id, queSe: 'esta reseña' })}
+                      hitSlop={8}
+                      style={{ alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                    >
+                      <Icon name="flag" size={13} color={C.muted} />
+                      <T size={12} weight={600} color={C.muted}>
+                        Reportar
+                      </T>
+                    </Pressable>
+                  ) : null}
                 </Card>
               ))
             )}
           </View>
+        ) : null}
+
+        {cuenta && !esMio ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Reportar este negocio"
+            onPress={() => setReportando({ tipo: 'negocio', id: n.id, queSe: 'este negocio' })}
+            hitSlop={8}
+            style={{ alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10 }}
+          >
+            <Icon name="flag" size={14} color={C.muted} />
+            <T size={13} weight={600} color={C.muted}>
+              Reportar este negocio
+            </T>
+          </Pressable>
         ) : null}
       </View>
     </Screen>
@@ -590,6 +622,8 @@ export default function Negocio() {
         </Modal>
       );
     })()}
+
+    <ReportarHoja objeto={reportando} onCerrar={() => setReportando(null)} />
 
     <Confirmar
       visible={cambio != null}
