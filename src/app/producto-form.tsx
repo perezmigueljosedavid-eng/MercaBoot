@@ -62,19 +62,22 @@ function Opcion({ titulo, texto, activa, onPress }: { titulo: string; texto: str
  * El comerciante escribe lo que quiere; la app deduce el tipo, la categoría y las características, y él puede corregirlas.
  */
 export default function ProductoForm() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, nombre: nombreSugerido } = useLocalSearchParams<{ id?: string; nombre?: string }>();
   const { s, negocio, agregarProducto, editarProducto, eliminarProducto } = useStore();
   const { decir } = useBoti();
   const giro = negocio?.giro;
   const previo = id ? s.productos.find((p) => p.id === id && p.negocioId === negocio?.id) : undefined;
   const perfilPrevio = useMemo(() => (previo ? perfilDeProducto(previo, giro) : null), [previo, giro]);
 
-  const [nombre, setNombre] = useState(previo?.nombre ?? '');
+  // Al venir de «lo que buscan y nadie tiene» el nombre ya viene escrito (con la primera letra en mayúscula) y lo demás se deduce de él
+  const sugerido = !id && typeof nombreSugerido === 'string' ? nombreSugerido.slice(0, 60).replace(/^./, (c) => c.toUpperCase()) : '';
+  const clasSugerida = useMemo(() => (sugerido ? clasificar(sugerido, giro) : null), [sugerido, giro]);
+  const [nombre, setNombre] = useState(previo?.nombre ?? sugerido);
   const [precio, setPrecio] = useState(previo?.precio != null ? String(previo.precio) : '');
-  const [tipo, setTipo] = useState<TipoProducto>(perfilPrevio?.tipo ?? clasificar('', giro).tipo);
+  const [tipo, setTipo] = useState<TipoProducto>(perfilPrevio?.tipo ?? clasSugerida?.tipo ?? clasificar('', giro).tipo);
   const [tipoTocado, setTipoTocado] = useState(!!previo?.tipo);
   const [unidad, setUnidad] = useState(() => {
-    if (!previo) return unidadInicial(giro, perfilPrevio?.tipo ?? clasificar('', giro).tipo);
+    if (!previo) return unidadInicial(giro, clasSugerida?.tipo ?? clasificar('', giro).tipo);
     return unidadesPara(giro, perfilPrevio?.tipo).includes(previo.unidad) ? previo.unidad : UNIDAD_OTRA;
   });
   const [unidadOtra, setUnidadOtra] = useState(previo && !unidadesPara(giro, perfilPrevio?.tipo).includes(previo.unidad) ? previo.unidad : '');
@@ -82,7 +85,7 @@ export default function ProductoForm() {
   const [disponible, setDisponible] = useState(previo?.disponible ?? true);
   const [porEncargo, setPorEncargo] = useState(previo?.porEncargo ?? false);
   const [existencias, setExistencias] = useState(previo?.cantidad != null ? String(previo.cantidad) : '');
-  const [categoria, setCategoria] = useState<CategoriaProducto>(previo?.categoria ?? categoriaInicial(giro));
+  const [categoria, setCategoria] = useState<CategoriaProducto>(previo?.categoria ?? (clasSugerida && clasSugerida.categoria !== 'otro' ? clasSugerida.categoria : categoriaInicial(giro)));
   const [descripcion, setDescripcion] = useState(previo?.descripcion ?? '');
   const [caracteristicas, setCaracteristicas] = useState<string[]>(previo?.caracteristicas ?? []);
   const [caracteristica, setCaracteristica] = useState('');
@@ -90,7 +93,7 @@ export default function ProductoForm() {
   const fotoActual = useFotoProducto(previo);
   const [fotoNueva, setFotoNueva] = useState<string | undefined | null>(null);
   const fotoUri = fotoNueva === null ? fotoActual : fotoNueva;
-  const [etiquetas, setEtiquetas] = useState<Etiqueta[]>(perfilPrevio?.etiquetas ?? []);
+  const [etiquetas, setEtiquetas] = useState<Etiqueta[]>(perfilPrevio?.etiquetas ?? clasSugerida?.etiquetas ?? []);
   const [tocado, setTocado] = useState(!!previo?.etiquetas);
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');

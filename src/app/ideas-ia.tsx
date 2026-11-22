@@ -3,6 +3,10 @@ import { Pressable, ScrollView, ScrollViewInstance, TextInput, View } from 'reac
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bienvenida, responder, responderConRecetaIA, responderSinRecetaIA } from '../ia/motor';
+import type { Bloque } from '../ia/vista';
+import { crearAlerta, quitarAlerta } from '../lib/alertas';
+import { avisosDisponibles, leerLocal } from '../lib/avisosTelefono';
+import { registrarSinResultado } from '../lib/busquedas';
 import { borrarHistorial, guardarHistorial, Historial, historialDe, historialVacio } from '../lib/historialIA';
 import { cargarRecetasIA, pedirRecetaIA } from '../lib/recetaIA';
 import { useCatalogo } from '../lib/usarDatos';
@@ -15,6 +19,22 @@ import { C, FONT } from '../ui/theme';
 
 let numero = 0;
 const nuevoId = () => `t${Date.now().toString(36)}${numero++}`;
+
+/**
+ * «Avísame cuando haya aguacate»: guarda lo que la persona espera y le explica cómo se va a enterar.
+ * Si no se pudo guardar (por ejemplo, ya tiene 10), en lugar de la promesa se le dice por qué.
+ */
+async function guardarEspera(termino: string, bloques: Bloque[]): Promise<Bloque[]> {
+  const motivo = await crearAlerta(termino);
+  if (motivo) return [{ t: 'texto', texto: motivo }];
+  const local = avisosDisponibles() ? await leerLocal() : null;
+  const nota = !local
+    ? 'Te lo digo cuando abras la app y alguna tienda ya lo tenga.'
+    : local.activo
+      ? 'Te mandaré un aviso al teléfono en cuanto una tienda lo tenga, aunque la app esté cerrada.'
+      : 'Para que te llegue aunque la app esté cerrada, activa «Avisos al teléfono» en tu perfil. Si no, te lo digo cuando abras la app.';
+  return [...bloques, { t: 'texto', texto: nota }];
+}
 
 export default function IdeasIA() {
   const params = useLocalSearchParams<{ antojo?: string; t?: string }>();
@@ -87,8 +107,14 @@ export default function IdeasIA() {
             r = res.ok ? responderConRecetaIA(res.receta, pedido, catRef.current, act.memoria, opciones) : responderSinRecetaIA(r, res.motivo);
           }
           if (charla.current !== miCharla) return;
+          // Lo que Boti guarda o quita por la persona, y lo que se buscó y nadie tiene (sin decir quién lo buscó)
+          let bloques = r.bloques;
+          if (r.alerta) bloques = await guardarEspera(r.alerta, bloques);
+          if (r.quitarAlerta) void quitarAlerta(r.quitarAlerta);
+          if (r.sinResultado?.length) registrarSinResultado(r.sinResultado);
+          if (charla.current !== miCharla) return;
           const ult = hRef.current;
-          poner({ ...ult, turnos: [...ult.turnos, { id: nuevoId(), quien: 'ia', bloques: r.bloques }], memoria: r.memoria, sugerencias: r.sugerencias });
+          poner({ ...ult, turnos: [...ult.turnos, { id: nuevoId(), quien: 'ia', bloques }], memoria: r.memoria, sugerencias: r.sugerencias });
         } finally {
           ocupado.current = false;
           if (vivo.current) setPensando(null);
@@ -141,10 +167,10 @@ export default function IdeasIA() {
         </View>
         <View style={{ flex: 1 }}>
           <T size={17} weight={800} ls={-0.01}>
-            Ideas para cocinar
+            Pregúntale a Boti
           </T>
           <T size={11} color={C.muted}>
-            Con lo que hay hoy, y qué tienda conviene
+            Ideas con lo que hay hoy, tu mandado y avisos
           </T>
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Empezar una charla nueva" hitSlop={8} onPress={reiniciar}>

@@ -2,12 +2,13 @@
  * Función «enviar-notificacion» (Supabase Edge Function) · Mercaboot versión 2
  * Autor: José David Pérez Miguel
  *
- * Manda avisos al teléfono (mensaje nuevo, pedido nuevo o cambiado, aviso de una tienda favorita) usando Firebase Cloud
- * Messaging. La app la llama justo después de hacer algo (mandar un mensaje, apartar un pedido, publicar un aviso).
+ * Manda avisos al teléfono (mensaje nuevo, pedido nuevo o cambiado, aviso de una tienda favorita, «ya hay aguacate»)
+ * usando Firebase Cloud Messaging. La app la llama justo después de hacer algo (mandar un mensaje, apartar un pedido,
+ * publicar un aviso, marcar que ya hay un producto).
  *
  * Cómo se cuida:
  *  - Solo entran cuentas con sesión iniciada (se comprueba el token de la persona, no basta la llave pública).
- *  - La app solo manda «qué fue» (mensaje, pedido o aviso) y su id. Quién recibe y qué texto lleva lo decide la base de
+ *  - La app solo manda «qué fue» (mensaje, pedido, aviso o producto) y su id. Quién recibe y qué texto lleva lo decide la base de
  *    datos (función notif_preparar), que revisa que quien pide avisar sí sea parte del chat o dueño del negocio, que el
  *    hecho sea reciente, que no se haya avisado ya y que la otra persona quiera ese aviso (y no esté en «no molestar»).
  *  - La llave de Firebase vive solo como secreto de Supabase (FCM_SERVICE_ACCOUNT). Nunca va en la app ni en el repositorio.

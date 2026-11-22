@@ -272,10 +272,10 @@ export function escucharAvisos(): () => void {
 let noAntesDe = 0;
 
 /**
- * Le dice a la función «enviar-notificacion» que pasó algo (mensaje, pedido o aviso) para que avise a la otra persona.
- * Nunca falla ni se espera: si no hay internet o Firebase no está activado, simplemente no pasa nada.
+ * Le dice a la función «enviar-notificacion» que pasó algo (mensaje, pedido, aviso o producto que ya hay) para que avise a
+ * quien corresponda. Nunca falla ni se espera: si no hay internet o Firebase no está activado, simplemente no pasa nada.
  */
-export function avisarAlOtro(tipo: 'mensaje' | 'pedido' | 'aviso', id: string): void {
+export function avisarAlOtro(tipo: 'mensaje' | 'pedido' | 'aviso' | 'producto', id: string): void {
   if (!avisosDisponibles() || Date.now() < noAntesDe) return;
   void (async () => {
     try {

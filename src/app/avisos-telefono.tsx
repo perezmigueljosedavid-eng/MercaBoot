@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Linking, View } from 'react-native';
+import { AppState, Linking, Pressable, View } from 'react-native';
+import { alertasEnMemoria, cargarAlertas, quitarAlerta, suscribirAlertas } from '../lib/alertas';
 import { activarAvisos, avisosDisponibles, desactivarAvisos, leerLocal, permisoConcedido } from '../lib/avisosTelefono';
 import { textoError } from '../lib/nube';
 import { supabase } from '../lib/supabase';
@@ -48,6 +49,9 @@ export default function AvisosTelefono() {
   const [leido, setLeido] = useState(false);
   const cargado = leido || !disponible || !cuenta;
   const vivo = useRef(true);
+  // Lo que la persona le pidió a Boti que le avise («avísame cuando haya aguacate»)
+  const [esperadas, setEsperadas] = useState<string[]>(alertasEnMemoria);
+  const esCliente = cuenta?.rol === 'cliente';
 
   useEffect(() => {
     vivo.current = true;
@@ -55,6 +59,13 @@ export default function AvisosTelefono() {
       vivo.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!esCliente) return;
+    const dejar = suscribirAlertas(() => setEsperadas(alertasEnMemoria()));
+    void cargarAlertas(true);
+    return dejar;
+  }, [esCliente]);
 
   /** Lee qué hay ahora: si Android dio el permiso, si la persona los prendió y qué avisos eligió. */
   const leer = useCallback(() => {
@@ -177,7 +188,7 @@ export default function AvisosTelefono() {
             <Group r={18}>
               <Opcion titulo="Mensajes" detalle="Cuando una tienda o un cliente te escribe en el chat." valor={prefs.mensajes} onCambiar={(v) => void cambiarPref('mensajes', v)} />
               <Opcion titulo="Pedidos" detalle="Pedido nuevo, aceptado, listo para recoger, pago reportado o cancelado." valor={prefs.pedidos} onCambiar={(v) => void cambiarPref('pedidos', v)} />
-              <Opcion titulo="Avisos de tus tiendas favoritas" detalle="Promociones, regalos y «ya hay» de las tiendas que sigues." valor={prefs.avisos} onCambiar={(v) => void cambiarPref('avisos', v)} />
+              <Opcion titulo="Avisos de tus tiendas favoritas" detalle="Promociones, regalos y «ya hay» de las tiendas que sigues, y lo que le pediste a Boti que te avise." valor={prefs.avisos} onCambiar={(v) => void cambiarPref('avisos', v)} />
               <Opcion titulo="No molestar de noche" detalle="Sin avisos de mensajes ni de tiendas de 10 de la noche a 7 de la mañana. Los pedidos sí te llegan." valor={prefs.silencio} onCambiar={(v) => void cambiarPref('silencio', v)} />
             </Group>
             <T size={12.5} lh={1.45} color={C.muted} style={{ paddingHorizontal: 4 }}>
@@ -185,6 +196,31 @@ export default function AvisosTelefono() {
             </T>
           </>
         )}
+
+        {esCliente && esperadas.length > 0 ? (
+          <>
+            <T size={13} weight={700} color={C.muted} style={{ paddingTop: 6, paddingLeft: 4 }}>
+              PRODUCTOS QUE ESPERAS
+            </T>
+            <Group r={18}>
+              {esperadas.map((t) => (
+                <View key={t} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 16 }}>
+                  <T size={15} weight={600} style={{ flex: 1 }}>
+                    {t}
+                  </T>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Dejar de esperar ${t}`} hitSlop={10} onPress={() => void quitarAlerta(t)}>
+                    <T size={13} weight={700} color={C.red}>
+                      Quitar
+                    </T>
+                  </Pressable>
+                </View>
+              ))}
+            </Group>
+            <T size={12.5} lh={1.45} color={C.muted} style={{ paddingHorizontal: 4 }}>
+              Boti te avisa en cuanto una tienda los tenga y luego los quita de esta lista. Para agregar uno, escríbele a Boti «avísame cuando haya…».
+            </T>
+          </>
+        ) : null}
       </View>
     </Screen>
   );

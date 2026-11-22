@@ -1,6 +1,7 @@
 import { festividad, proxima, textoFaltan } from '../data/festividades';
 import type { Aviso, Negocio } from '../data/tipos';
 import { distanciaA, etiquetaDistancia } from '../lib/distancia';
+import { terminoDeAlerta } from './alertas';
 import { Catalogo, conIngredientes, Item, mejorPrimero } from './catalogo';
 import { baratasHoy, comparar, Criterio, dinero, Insignia, insigniasTiendas, NOMBRE_CRITERIO, ofertasPorTienda, resumenComparacion } from './comparar';
 import type { Entendido } from './entender';
@@ -226,7 +227,14 @@ export function producto(e: Entendido, ctx: Ctx, criterioBase: Criterio = 'cerca
   }
   bloques.push({ t: 'texto', texto: 'Si es urgente, escríbele a la tienda desde su perfil para preguntar si ya les llegó.' });
   // Una búsqueda sin resultados no borra la anterior: "por precio" después sigue hablando de lo último que sí se encontró
-  return { bloques, chips: ['¿Qué hay hoy?', 'Tiendas cerca de mí'], mem: { ingredientes: ids, modo: 'productos' } };
+  const buscado = (e.dicho || e.palabras.join(' ')).trim();
+  const esperado = terminoDeAlerta(buscado);
+  const chips = ['¿Qué hay hoy?', 'Tiendas cerca de mí'];
+  if (esperado) {
+    bloques.push({ t: 'texto', texto: 'Si quieres, te aviso en cuanto una tienda lo marque como disponible.' });
+    chips.unshift(`Avísame cuando haya ${esperado}`);
+  }
+  return { bloques, chips, mem: { ingredientes: ids, modo: 'productos' }, ok: false, ...(esperado ? { sinResultado: [esperado] } : {}) };
 }
 
 /** "Por precio", "Por estrellas", "¿Quién entrega a domicilio?" sobre la última búsqueda de productos. */

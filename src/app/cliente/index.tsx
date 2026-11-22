@@ -111,7 +111,7 @@ export default function HomeCliente() {
               ¿Qué se te antoja?
             </T>
             <T size={13.5} lh={1.4} color={C.white}>
-              Dile a Boti tu antojo y te da ideas de recetas con lo que hay hoy en las tiendas, y dónde conseguirlo.
+              Dile a Boti tu antojo y te da ideas con lo que hay hoy, y dónde conseguirlo. También arma tu mandado y te avisa cuando llegue lo que esperas.
             </T>
           </View>
         </View>

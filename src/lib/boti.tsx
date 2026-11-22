@@ -71,12 +71,19 @@ const ARCHIVOS: Record<SonidoBoti, number> = {
   giro: require('../../assets/sonidos/giro.wav'),
 };
 
+/** Un botón que Boti pone en su globo: lleva a otra pantalla de la app (por ejemplo «Pregúntame» o «Ver tienda»). */
+export interface AccionBoti {
+  texto: string;
+  ruta: string;
+}
+
 export interface MensajeBoti {
   id: number;
   texto: string;
   pose: PoseBoti;
   /** Cuánto se queda el globo en pantalla, en milisegundos. */
   ms: number;
+  accion?: AccionBoti;
 }
 
 interface OpcionesDecir {
@@ -86,6 +93,8 @@ interface OpcionesDecir {
   emocion?: EmocionBoti;
   /** Cuánto se queda el globo en pantalla, en milisegundos. */
   ms?: number;
+  /** Un botón en el globo que abre otra pantalla. */
+  accion?: AccionBoti;
 }
 
 interface CtxBoti {
@@ -214,7 +223,7 @@ export function BotiProvider({ children }: { children: React.ReactNode }) {
     (texto: string, op?: OpcionesDecir) => {
       if (!ajustes.activo || !ajustes.compania) return;
       ultimoId += 1;
-      setMensaje({ id: ultimoId, texto, pose: op?.pose ?? 'saludo', ms: op?.ms ?? 6000 });
+      setMensaje({ id: ultimoId, texto, pose: op?.pose ?? 'saludo', ms: op?.ms ?? 6000, accion: op?.accion });
       if (op?.emocion) setEmocion({ tipo: op.emocion, id: ultimoId });
       else if (op?.sonido) sonar(op.sonido);
     },

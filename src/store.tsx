@@ -56,7 +56,10 @@ import {
   type FilaProducto,
   type FilaResena,
 } from './lib/nube';
+import { olvidarAlertas } from './lib/alertas';
 import { avisarAlOtro, quitarDispositivoDeEstaCuenta } from './lib/avisosTelefono';
+import { avisarDeProductos } from './lib/avisosDeProductos';
+import { olvidarBusquedas } from './lib/busquedas';
 import { guardarFoto, quitarFoto, vaciarFotos } from './lib/fotos';
 import { sinHorario, semanaValida, textoHorario } from './lib/horario';
 import { avisoDeCambio, cantidadTexto, disponibleParaPedir, esActivo, pasoCantidad, redondear, totales } from './lib/pedidos';
@@ -1018,6 +1021,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         fijarCarro(null, false);
         lineasGuardadas.current.clear();
         propias.current.clear();
+        olvidarAlertas();
+        olvidarBusquedas();
         setModo(null);
         setEstadoRed('conectando');
         setLocalListo(true);
@@ -1543,6 +1548,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     // La foto que la persona acaba de elegir ya está en el teléfono: no hace falta bajarla
     if (d.fotoUri) guardarFoto(fila.id, fila.foto_huella ?? undefined, d.fotoUri);
     dispatch({ t: 'prod', p: productoDeFila(fila) });
+    // Si alguien esperaba este producto («avísame cuando haya…»), se le avisa
+    if (fila.disponible) avisarDeProductos([{ id: fila.id, nombre: fila.nombre }]);
     return null;
   }, []);
 
@@ -1587,6 +1594,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       else quitarFoto(id);
     }
     dispatch({ t: 'prod', p: productoDeFila(nueva) });
+    // Volvió a haber (o se acaba de marcar disponible): se avisa a quien lo esperaba
+    if (!prod.disponible && nueva.disponible) avisarDeProductos([{ id, nombre: nueva.nombre }]);
     return null;
   }, []);
 
@@ -1613,7 +1622,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           avisar(error ? textoError(error) : 'No se pudo cambiar el producto.');
           return;
         }
-        dispatch({ t: 'prod', p: productoDeFila(data[0] as FilaProducto) });
+        const fila = data[0] as FilaProducto;
+        dispatch({ t: 'prod', p: productoDeFila(fila) });
+        // «Ya hay»: se avisa a quien lo esperaba (la base de datos revisa quién y cuándo)
+        if (v && fila.disponible) avisarDeProductos([{ id, nombre: fila.nombre }]);
       })();
     },
     [avisar],
@@ -1633,6 +1645,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const aplicar = () => {
       const porId = new Map(baseRef.current.productos.map((p) => [p.id, p]));
       const ps: Producto[] = [];
+      const volvieron: { id: string; nombre: string }[] = [];
       for (const c of hechos) {
         const p = porId.get(c.id);
         if (!p) continue;
@@ -1642,8 +1655,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           disponible: c.disponible ?? p.disponible,
           actualizado: Date.now(),
         });
+        if (c.disponible === true && !p.disponible) volvieron.push({ id: p.id, nombre: p.nombre });
       }
       dispatch({ t: 'prods', ps, del: [] });
+      // Lo que volvió a haber: se avisa a quien lo esperaba
+      avisarDeProductos(volvieron);
     };
     for (const tanda of trocear(validos, 300)) {
       const { data, error } = await supabase.rpc('productos_actualizar_lote', { p_negocio: mio.id, p_cambios: tanda });
@@ -1680,10 +1696,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         };
       });
       const resumen: ResumenLote = { agregados: 0, repetidos: 0, invalidos: 0 };
+      const yaTenia = new Set(baseRef.current.productos.filter((x) => x.negocioId === mio.id).map((x) => x.id));
+      /** Un instante después de leer lo nuevo, se avisa a quien esperaba alguno de esos productos. */
+      const avisarDeLoNuevo = () => {
+        setTimeout(() => {
+          avisarDeProductos(baseRef.current.productos.filter((x) => x.negocioId === mio.id && x.disponible && !yaTenia.has(x.id)));
+        }, 600);
+      };
       for (const tanda of trocear(filas, 300)) {
         const { data, error } = await supabase.rpc('productos_agregar_lote', { p_negocio: mio.id, p_productos: tanda });
         if (error) {
           void refrescarInterno(true);
+          if (resumen.agregados > 0) avisarDeLoNuevo();
           const motivo = textoError(error);
           return { error: resumen.agregados > 0 ? `Se agregaron ${resumen.agregados} productos, pero después pasó esto: ${motivo}` : motivo };
         }
@@ -1694,6 +1718,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
       // Los productos nuevos se leen de la nube (traen su id) para verlos de inmediato
       await refrescarInterno(true);
+      if (resumen.agregados > 0) avisarDeLoNuevo();
       return resumen;
     },
     [refrescarInterno],
@@ -1747,7 +1772,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (nuevo) avisarAlOtro('aviso', nuevo.id);
       }
     }
-    if (prod && !prod.error && prod.data) dispatch({ t: 'prod', p: productoDeFila(prod.data as FilaProducto) });
+    if (prod && !prod.error && prod.data) {
+      const fila = prod.data as FilaProducto;
+      dispatch({ t: 'prod', p: productoDeFila(fila) });
+      // «Ya hay …»: además de avisar a quienes siguen la tienda, se avisa a quien esperaba ese producto
+      if (a.tipo === 'hay' && fila.disponible) avisarDeProductos([{ id: fila.id, nombre: fila.nombre }]);
+    }
     return null;
   }, []);
 

@@ -215,4 +215,4 @@ export const TEXTO_ESTRELLAS = ['', 'Muy mal', 'Mal', 'Regular', 'Muy bien', 'Ex
 /* ───────── chat ───────── */
 
 export const RESPUESTAS_RAPIDAS_CLIENTE = ['¿Qué hay hoy?', '¿A qué hora cierran?', '¿Hacen entregas a domicilio?'];
-export const RESPUESTAS_RAPIDAS_COMERCIANTE = ['Sí hay', 'Ya se acabó', 'Llega mañana'];
+export const RESPUESTAS_RAPIDAS_COMERCIANTE = ['Sí hay', 'Sí hay, apártalo desde la app', 'Ya se acabó', 'Llega mañana'];

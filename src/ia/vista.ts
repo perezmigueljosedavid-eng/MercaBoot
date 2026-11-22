@@ -164,4 +164,10 @@ export interface Respuesta {
    * si puede, la pantalla se la pide con esta petición y reemplaza esos bloques por la receta.
    */
   ia?: PeticionIA;
+  /** «Avísame cuando haya aguacate»: la pantalla guarda este aviso. */
+  alerta?: string;
+  /** «Ya no me avises de aguacate»: la pantalla quita este aviso. */
+  quitarAlerta?: string;
+  /** Búsquedas sin resultado (solo el texto del producto), para «lo que buscan y no encuentran». */
+  sinResultado?: string[];
 }

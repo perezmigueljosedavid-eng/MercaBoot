@@ -10,7 +10,9 @@
 --   3) notificaciones_enviadas         Lista de lo ya avisado, para que un mismo mensaje o pedido no avise dos veces.
 --   4) registrar_dispositivo() / quitar_dispositivo() / guardar_preferencias_notificacion()
 --                                      Lo que usa la app (con sesión iniciada).
---   5) notif_preparar()                Lo que usa SOLO la función «enviar-notificacion»: revisa que quien pide avisar sí
+--   5) alertas_producto                «Avísame cuando haya aguacate»: lo que cada persona espera, con sus funciones
+--                                      crear_alerta_producto() y quitar_alerta_producto().
+--   6) notif_preparar()                Lo que usa SOLO la función «enviar-notificacion»: revisa que quien pide avisar sí
 --                                      pueda (que sea parte del chat, dueño del negocio…), que no se haya avisado ya, las
 --                                      preferencias y el «no molestar», y devuelve a qué teléfonos y qué texto mandar.
 --
@@ -47,9 +49,12 @@ create table if not exists public.preferencias_notificacion (
 comment on table public.preferencias_notificacion is
   'Qué avisos al teléfono quiere cada persona. Si no tiene fila, valen los valores de omisión (todo encendido).';
 alter table public.preferencias_notificacion enable row level security;
-drop policy if exists preferencias_notif_ver on public.preferencias_notificacion;
-create policy preferencias_notif_ver on public.preferencias_notificacion
-  for select to authenticated using (usuario_id = (select auth.uid()));
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'preferencias_notificacion' and policyname = 'preferencias_notif_ver') then
+    create policy preferencias_notif_ver on public.preferencias_notificacion
+      for select to authenticated using (usuario_id = (select auth.uid()));
+  end if;
+end $$;
 revoke all on table public.preferencias_notificacion from anon, authenticated;
 grant select on table public.preferencias_notificacion to authenticated;
 
@@ -110,11 +115,73 @@ begin
         actualizado = now();
 end $$;
 
-drop function if exists public.notif_preparar(uuid, text, uuid);
+-- 4b) «Avísame cuando haya aguacate» --------------------------------------------------------------------------------------
+-- Texto sin acentos ni mayúsculas (la app hace lo mismo antes de mandar lo que escribió la persona).
+create or replace function public._texto_simple(p_texto text) returns text
+language sql immutable set search_path = public as $$
+  select btrim(regexp_replace(lower(translate(coalesce(p_texto, ''), 'áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunAEIOUUN')), '\s+', ' ', 'g'))
+$$;
 
--- 5) Lo que usa la función «enviar-notificacion» -----------------------------------------------------------------------------
--- p_quien: la cuenta que pide avisar (la función ya comprobó su sesión). p_tipo: 'mensaje', 'pedido' o 'aviso'. p_id: el
--- id del mensaje, del pedido o del aviso. p_ahora solo sirve para probar el «no molestar» a otra hora.
+-- ¿El nombre de un producto es lo que la persona espera? Palabra completa (con su plural): «huevos» coincide con «Huevo blanco»,
+-- pero «pan» no coincide con «panela».
+create or replace function public._alerta_coincide(p_nombre text, p_termino text) returns boolean
+language sql immutable set search_path = public as $$
+  select exists (
+    select 1
+      from unnest(array[p_termino, p_termino || 's', p_termino || 'es', regexp_replace(p_termino, 's$', ''), regexp_replace(p_termino, 'es$', '')]) as c(x)
+     where x <> '' and (' ' || btrim(regexp_replace(regexp_replace(public._texto_simple(p_nombre), '[^a-z0-9 ]', ' ', 'g'), '\s+', ' ', 'g')) || ' ') like ('% ' || x || ' %')
+  )
+$$;
+
+create table if not exists public.alertas_producto (
+  usuario_id uuid not null references auth.users (id) on delete cascade,
+  termino    text not null check (termino ~ '^[a-z]+( [a-z]+){0,3}$' and char_length(termino) between 3 and 40),
+  creado     timestamptz not null default now(),
+  primary key (usuario_id, termino)
+);
+comment on table public.alertas_producto is
+  'Lo que cada persona espera («avísame cuando haya aguacate»). Se borra sola cuando se avisa. Cada persona solo ve las suyas.';
+alter table public.alertas_producto enable row level security;
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'alertas_producto' and policyname = 'alertas_producto_ver') then
+    create policy alertas_producto_ver on public.alertas_producto
+      for select to authenticated using (usuario_id = (select auth.uid()));
+  end if;
+end $$;
+revoke all on table public.alertas_producto from anon, authenticated;
+grant select on table public.alertas_producto to authenticated;
+
+-- NULL = listo; si no, el motivo en español.
+create or replace function public.crear_alerta_producto(p_termino text) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_t text := public._texto_simple(p_termino);
+begin
+  if v_uid is null then return 'Inicia sesión para continuar.'; end if;
+  if v_t !~ '^[a-z]+( [a-z]+){0,3}$' or char_length(v_t) not between 3 and 40 then
+    return 'Escribe el producto solo con letras (por ejemplo: aguacate).';
+  end if;
+  perform public._limite('alerta_producto', 30, 3600);
+  if not exists (select 1 from public.alertas_producto where usuario_id = v_uid and termino = v_t)
+     and (select count(*) from public.alertas_producto where usuario_id = v_uid) >= 10 then
+    return 'Ya tienes 10 avisos de productos. Quita alguno para agregar otro.';
+  end if;
+  insert into public.alertas_producto (usuario_id, termino) values (v_uid, v_t) on conflict (usuario_id, termino) do nothing;
+  return null;
+end $$;
+
+create or replace function public.quitar_alerta_producto(p_termino text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then return; end if;
+  delete from public.alertas_producto where usuario_id = auth.uid() and termino = public._texto_simple(p_termino);
+end $$;
+
+-- 6) Lo que usa la función «enviar-notificacion» -----------------------------------------------------------------------------
+-- p_quien: la cuenta que pide avisar (la función ya comprobó su sesión). p_tipo: 'mensaje', 'pedido', 'aviso' o 'producto' (un
+-- producto que acaba de haber, para quienes pidieron «avísame cuando haya…»). p_id: el id del mensaje, del pedido, del aviso o
+-- del producto. p_ahora solo sirve para probar el «no molestar» a otra hora.
 -- Devuelve {"ok": true, "tokens": [...], "titulo", "cuerpo", "ruta", "canal", "tipo"} o {"ok": false, "motivo": "..."}.
 create or replace function public.notif_preparar(p_quien uuid, p_tipo text, p_id uuid, p_ahora timestamptz default now())
 returns jsonb
@@ -134,6 +201,7 @@ declare
   m record;
   pe record;
   a record;
+  pd record;
 begin
   if p_quien is null or p_id is null then return jsonb_build_object('ok', false, 'motivo', 'no_aplica'); end if;
 
@@ -235,6 +303,30 @@ begin
     select coalesce(array_agg(x.usuario_id), '{}') into v_dest
       from (select f.usuario_id from public.favoritos f where f.negocio_id = a.negocio_id and f.usuario_id <> p_quien limit 300) x;
 
+  -- ── Un producto que vuelve a haber: avisa a quienes pidieron «avísame cuando haya …» ──
+  elsif p_tipo = 'producto' then
+    select pr.nombre, pr.precio, pr.unidad, pr.disponible, pr.cantidad, pr.actualizado, pr.negocio_id,
+           n.nombre as negocio_nombre, n.dueno_id
+      into pd
+      from public.productos pr join public.negocios n on n.id = pr.negocio_id
+     where pr.id = p_id;
+    if not found or pd.dueno_id is distinct from p_quien or pd.actualizado < now() - interval '10 minutes' then
+      return jsonb_build_object('ok', false, 'motivo', 'no_autorizado');
+    end if;
+    if not pd.disponible or (pd.cantidad is not null and pd.cantidad <= 0) then
+      return jsonb_build_object('ok', false, 'motivo', 'no_aplica');
+    end if;
+    v_canal := 'avisos'; v_pref := 'avisos';
+    v_clave := 'r:' || p_id || ':' || to_char(p_ahora at time zone 'America/Mexico_City', 'YYYYMMDDHH24');
+    v_titulo := 'Ya hay ' || left(pd.nombre, 50);
+    v_cuerpo := left(pd.negocio_nombre, 60) || ' lo tiene'
+      || case when pd.precio is not null then ' a $' || trim_scale(pd.precio)::text || ' por ' || left(pd.unidad, 20) else '' end || '.';
+    v_ruta := '/negocio/' || pd.negocio_id;
+    select coalesce(array_agg(x.usuario_id), '{}') into v_dest
+      from (select al.usuario_id from public.alertas_producto al
+             where al.usuario_id <> p_quien and public._alerta_coincide(pd.nombre, al.termino)
+             limit 300) x;
+
   else
     return jsonb_build_object('ok', false, 'motivo', 'no_aplica');
   end if;
@@ -256,6 +348,13 @@ begin
     from (select d.token from public.dispositivos d where d.usuario_id = any (v_dest) order by d.actualizado desc limit 300) t;
   if cardinality(v_tokens) = 0 then return jsonb_build_object('ok', false, 'motivo', 'sin_dispositivos'); end if;
 
+  -- Lo que se esperaba ya llegó: esas alertas (de quienes sí tienen teléfono registrado) se borran
+  if p_tipo = 'producto' then
+    delete from public.alertas_producto al
+     where al.usuario_id = any (v_dest) and public._alerta_coincide(pd.nombre, al.termino)
+       and exists (select 1 from public.dispositivos d where d.usuario_id = al.usuario_id and d.token = any (v_tokens));
+  end if;
+
   return jsonb_build_object('ok', true, 'tokens', to_jsonb(v_tokens), 'titulo', v_titulo, 'cuerpo', v_cuerpo,
                             'ruta', v_ruta, 'canal', v_canal, 'tipo', p_tipo);
 end $$;
@@ -269,5 +368,10 @@ revoke all on function public.registrar_dispositivo(text, text), public.quitar_d
 grant execute on function public.registrar_dispositivo(text, text) to authenticated;
 grant execute on function public.quitar_dispositivo(text) to authenticated;
 grant execute on function public.guardar_preferencias_notificacion(boolean, boolean, boolean, boolean) to authenticated;
+
+revoke all on function public._texto_simple(text), public._alerta_coincide(text, text),
+  public.crear_alerta_producto(text), public.quitar_alerta_producto(text) from public, anon;
+grant execute on function public.crear_alerta_producto(text) to authenticated;
+grant execute on function public.quitar_alerta_producto(text) to authenticated;
 
 notify pgrst, 'reload schema';

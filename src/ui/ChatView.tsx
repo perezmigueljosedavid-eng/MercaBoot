@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RESPUESTAS_RAPIDAS_CLIENTE, RESPUESTAS_RAPIDAS_COMERCIANTE } from '../data/contenido';
 import type { Mensaje } from '../data/tipos';
 import { abrirMapas } from '../lib/geo';
+import { horaBonita } from '../lib/horario';
 import { dinero, esActivo, etiquetaEstado } from '../lib/pedidos';
 import { sinLeer, useStore } from '../store';
 import { fechaCorta } from './bits';
@@ -12,6 +13,7 @@ import { Icon } from './Icon';
 import { BackBtn, Btn, Card, Chip, Screen } from './kit';
 import { Logo } from './Logo';
 import { Contador, EstadoTag } from './pedidos';
+import { SelectorHora } from './SelectorHora';
 import { T } from './T';
 import { C, FONT } from './theme';
 
@@ -120,6 +122,8 @@ export function ChatView({ modo, id, showBack }: { modo: 'cliente' | 'comerciant
   const insets = useSafeAreaInsets();
   const [texto, setTexto] = useState('');
   const [error, setError] = useState('');
+  /** El comerciante elige a qué hora llega algo («Llega a las…»). */
+  const [eligiendoHora, setEligiendoHora] = useState(false);
   const scroll = useRef<ScrollViewInstance>(null);
 
   const conv =
@@ -298,6 +302,7 @@ export function ChatView({ modo, id, showBack }: { modo: 'cliente' | 'comerciant
             {rapidas.map((r) => (
               <Chip key={r} label={r} h={36} px={12} size={13} border={C.input} onPress={() => enviar(r)} />
             ))}
+            {modo === 'comerciante' ? <Chip label="Llega a las…" h={36} px={12} size={13} border={C.input} onPress={() => setEligiendoHora(true)} /> : null}
           </View>
           {error ? (
             <T size={13} weight={600} color={C.red} accessibilityRole="alert">
@@ -332,6 +337,18 @@ export function ChatView({ modo, id, showBack }: { modo: 'cliente' | 'comerciant
           </View>
         </View>
       )}
+      {modo === 'comerciante' ? (
+        <SelectorHora
+          visible={eligiendoHora}
+          titulo="¿A qué hora llega?"
+          valor="12:00"
+          onCerrar={() => setEligiendoHora(false)}
+          onElegir={(h) => {
+            setEligiendoHora(false);
+            void enviar(`Llega hoy a las ${horaBonita(h)}.`);
+          }}
+        />
+      ) : null}
     </Screen>
   );
 }

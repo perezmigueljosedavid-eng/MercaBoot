@@ -119,7 +119,7 @@ export function repartir<T>(lista: T[], n: number): T[][] {
   return r;
 }
 
-export const TIPOS_VALIDOS = new Set(['mensaje', 'pedido', 'aviso']);
+export const TIPOS_VALIDOS = new Set(['mensaje', 'pedido', 'aviso', 'producto']);
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Revisa lo que manda la app: {tipo, id}. */

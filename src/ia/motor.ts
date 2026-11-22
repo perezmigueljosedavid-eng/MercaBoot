@@ -1,6 +1,7 @@
 import type { Catalogo } from './catalogo';
 import { avisos, cerca, hoy, ordenar, producto, tienda, tiendas } from './consultas';
 import { entender, Entendido } from './entender';
+import { extras } from './extras';
 import { buscarPorNombre, coincidenTodas } from './evaluar';
 import { CHIPS_INICIO, chipsInicio, Ctx, gruposInicio, lista, Parcial, pick, resumenCatalogo, saludoHora } from './frases';
 import { receta } from './recetas';
@@ -49,7 +50,10 @@ function ayuda(ctx: Ctx): Parcial {
           '• Mostrarte lo que ya está preparado: postres, fresas con crema, comida corrida, pan, bebidas…\n' +
           '• Explicarte cómo se prepara cada receta, paso a paso, y cuánto rinde para tus invitados.\n' +
           '• Decirte en qué tienda conviene comprar: comparo por estrellas, precio, cercanía y si entregan a domicilio, y siempre te muestro todas las tiendas que tienen lo que buscas.\n' +
-          '• Contarte qué hay hoy, las promociones y los regalos de cada temporada.',
+          '• Contarte qué hay hoy, las promociones y los regalos de cada temporada.\n' +
+          '• Armar tu mandado: escríbeme «mi mandado: huevo, tortillas, jitomate» y te digo qué tienda lo reúne.\n' +
+          '• Avisarte cuando algo que no hay llegue: «avísame cuando haya aguacate».\n' +
+          '• Decirte qué tiendas están abiertas ahora.',
       },
       { t: 'ideas', grupos: gruposInicio(ctx.ahora) },
     ],
@@ -197,6 +201,18 @@ export function bienvenida(cat: Catalogo, opciones: Opciones = {}): Respuesta {
  */
 export function responder(texto: string, cat: Catalogo, memoria: Memoria = MEMORIA_INICIAL, opciones: Opciones = {}): Respuesta {
   const ctx: Ctx = { cat, mem: memoria, ahora: opciones.ahora ?? new Date(), nombre: opciones.nombre };
+  // «Avísame cuando haya…», «mi mandado: …» y «¿qué tiendas están abiertas?» se atienden antes que lo demás
+  const aparte = extras(texto, ctx);
+  if (aparte) {
+    return {
+      bloques: aparte.bloques,
+      sugerencias: aparte.chips.slice(0, 5),
+      memoria: { ...memoria, ...(aparte.mem ?? {}), turno: memoria.turno + 1 },
+      ...(aparte.alerta ? { alerta: aparte.alerta } : {}),
+      ...(aparte.quitarAlerta ? { quitarAlerta: aparte.quitarAlerta } : {}),
+      ...(aparte.sinResultado?.length ? { sinResultado: aparte.sinResultado } : {}),
+    };
+  }
   const e = entender(texto, cat.negocios, memoria);
   const refiere = /\b(eso|ese|esa|esos|esas|lo mismo|con ello)\b/.test(norm(texto));
 
@@ -268,7 +284,13 @@ export function responder(texto: string, cat: Catalogo, memoria: Memoria = MEMOR
   if (e.dieta === 'carne' && !e.vegetariano) mem.vegetariano = false;
   if (e.personas) mem.personas = e.personas;
   const largo = e.tipo === 'saludo' || e.tipo === 'ayuda';
-  return { bloques: p.bloques, sugerencias: p.chips.slice(0, largo ? 12 : 5), memoria: mem, ...(p.ia ? { ia: p.ia } : {}) };
+  return {
+    bloques: p.bloques,
+    sugerencias: p.chips.slice(0, largo ? 12 : 5),
+    memoria: mem,
+    ...(p.ia ? { ia: p.ia } : {}),
+    ...(p.sinResultado?.length ? { sinResultado: p.sinResultado } : {}),
+  };
 }
 
 /* ───────── receta escrita por la IA ───────── */

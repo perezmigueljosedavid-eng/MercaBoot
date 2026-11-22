@@ -1,8 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { nombreCategoria } from '../../data/contenido';
+import { terminoDeAlerta } from '../../ia/alertas';
 import { precioBase } from '../../ia/comparar';
+import { crearAlerta } from '../../lib/alertas';
+import { registrarSinResultado } from '../../lib/busquedas';
 import {
   buscarNegocios,
   buscarProductos,
@@ -18,7 +21,7 @@ import { useStore } from '../../store';
 import { textoPrecio } from '../../ui/bits';
 import { Boti } from '../../ui/Boti';
 import { Icon } from '../../ui/Icon';
-import { Badge, Chip, Screen, Tag } from '../../ui/kit';
+import { Badge, Btn, Chip, Screen, Tag } from '../../ui/kit';
 import { Logo } from '../../ui/Logo';
 import { NegocioCard } from '../../ui/NegocioCard';
 import { textoEstrellas } from '../../ui/Reputacion';
@@ -39,7 +42,7 @@ const NOTA_ORDEN: Record<OrdenProductos, string> = {
 
 export default function Buscar() {
   const params = useLocalSearchParams<{ q?: string }>();
-  const { s, favoritos } = useStore();
+  const { s, favoritos, avisar } = useStore();
   const { coords } = useUbicacion();
   const negocios = useNegociosOrdenados();
   const [q, setQ] = useState(params.q ?? '');
@@ -91,6 +94,33 @@ export default function Buscar() {
   const insignias = useMemo(() => insigniasDeTiendas(tiendas), [tiendas]);
 
   const hayProductosPublicados = s.productos.length > 0;
+
+  // «Lo que buscan y no encuentran»: si ninguna tienda tiene eso, se cuenta el texto (solo el texto, sin saber quién lo buscó)
+  // para que los comerciantes sepan qué se está pidiendo, y se le ofrece a la persona que Boti le avise cuando haya.
+  const terminoEsperado = terminoDeAlerta(consulta);
+  // Si lo escrito es el nombre de una tienda, no es un producto que falte
+  const esNombreDeTienda = useMemo(() => !!consulta && buscarNegocios(consulta, negocios).length > 0, [consulta, negocios]);
+  const puedeEsperar = !!terminoEsperado && hayProductosPublicados && !domicilio && !esNombreDeTienda && !productos.some((r) => r.p.disponible);
+  useEffect(() => {
+    if (!puedeEsperar) return;
+    const espera = setTimeout(() => registrarSinResultado([consulta]), 1500);
+    return () => clearTimeout(espera);
+  }, [puedeEsperar, consulta]);
+
+  const [esperando, setEsperando] = useState(false);
+  const [yaEspera, setYaEspera] = useState<string | null>(null);
+  const esperar = async () => {
+    if (!terminoEsperado || esperando) return;
+    setEsperando(true);
+    const motivo = await crearAlerta(terminoEsperado);
+    setEsperando(false);
+    if (motivo) {
+      avisar(motivo);
+      return;
+    }
+    setYaEspera(terminoEsperado);
+    avisar(`Listo: Boti te avisa cuando una tienda tenga ${terminoEsperado}.`);
+  };
 
   return (
     <Screen contentStyle={{ gap: 16, paddingTop: 16, paddingHorizontal: 20, paddingBottom: 16 }}>
@@ -150,6 +180,15 @@ export default function Buscar() {
           <T size={14} color={C.muted}>
             Productos para “{consulta}”
           </T>
+          {puedeEsperar ? (
+            yaEspera === terminoEsperado ? (
+              <T size={13} lh={1.4} weight={600} color={C.green}>
+                Listo: Boti te avisará cuando una tienda tenga {terminoEsperado}.
+              </T>
+            ) : (
+              <Btn label={esperando ? 'Guardando…' : `Avísame cuando haya ${terminoEsperado}`} variant="outline" h={44} r={12} size={14} disabled={esperando} onPress={() => void esperar()} />
+            )
+          ) : null}
           <View style={{ gap: 10 }}>
             {productos.length === 0 ? (
               <T size={14} lh={1.45} color={C.muted}>

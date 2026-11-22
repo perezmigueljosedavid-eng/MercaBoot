@@ -10,6 +10,7 @@ import { Boti } from '../../ui/Boti';
 import { FiestaProxima } from '../../ui/Fiestas';
 import { Btn, Card, Group, Screen, SectionTitle, Toggle } from '../../ui/kit';
 import { Logo } from '../../ui/Logo';
+import { ResumenDelDia } from '../../ui/ResumenDelDia';
 import { T } from '../../ui/T';
 import { C } from '../../ui/theme';
 
@@ -146,6 +147,9 @@ export default function HomeComerciante() {
           </Card>
         </Pressable>
       ) : null}
+
+      {/* lo que hoy conviene atender y lo que buscaron los vecinos sin encontrar */}
+      <ResumenDelDia />
 
       {/* cifras */}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>

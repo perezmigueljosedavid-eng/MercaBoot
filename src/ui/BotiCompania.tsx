@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, PanResponder, Pressable, useWindowDimensions, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useSegments } from 'expo-router';
+import { router, useSegments } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { claveDePantalla, CONSEJOS, FRASES_EMOCION, SIN_COMPANIA } from '../data/botiConsejos';
-import { useBoti } from '../lib/boti';
+import { type AccionBoti, useBoti } from '../lib/boti';
 import { useStore } from '../store';
 import { Boti, type EmocionBoti, type PoseBoti } from './Boti';
 import { T } from './T';
@@ -24,6 +24,16 @@ const OBJETO_MS = 8_000;
 /** Las emociones alegres que elige al jugar solo. */
 const JUEGOS: EmocionBoti[] = ['brinco', 'baila', 'alegre', 'sorpresa', 'gira', 'enamorado', 'brinco', 'baila'];
 const CLAVE_INTRO = 'mercaboot:boti:intro:v1';
+
+/**
+ * El botón que Boti pone en sus consejos: a quien compra lo manda a preguntarle (ideas, dónde hay algo, «avísame cuando haya…»);
+ * a quien vende, a su resumen del día. No sale en la pantalla a la que llevaría.
+ */
+function accionDeConsejo(rol: string | undefined, clave: string): AccionBoti | undefined {
+  if (rol === 'cliente') return clave === 'ideas-ia' ? undefined : { texto: 'Pregúntame', ruta: '/ideas-ia' };
+  if (rol === 'comerciante') return clave === 'comerciante' ? undefined : { texto: 'Mi resumen', ruta: '/comerciante' };
+  return undefined;
+}
 
 /** Dónde está Boti respecto a su esquina y hasta dónde puede llegar. */
 interface Arrastre {
@@ -175,8 +185,20 @@ export function BotiCompania() {
     const n = turno.current[clave] ?? 0;
     turno.current[clave] = n + 1;
     // El toque ya suena dentro de Boti; aquí solo cambia el globo.
-    decir(lista[n % lista.length], { pose: pantalla.pose, ms: 6500 });
-  }, [clave, pantalla, decir, despertar, dormido, emocionar]);
+    decir(lista[n % lista.length], { pose: pantalla.pose, ms: 6500, accion: accionDeConsejo(cuenta?.rol, clave) });
+  }, [clave, pantalla, decir, despertar, dormido, emocionar, cuenta?.rol]);
+
+  const irA = useCallback(
+    (ruta: string) => {
+      callar();
+      try {
+        router.push(ruta as never);
+      } catch {
+        // la pantalla todavía no estaba lista: no pasa nada
+      }
+    },
+    [callar],
+  );
 
   if (!visible) return null;
 
@@ -219,11 +241,20 @@ export function BotiCompania() {
             <T size={13} lh={1.4} color={C.white}>
               {mensaje.texto}
             </T>
-            <Pressable accessibilityRole="button" accessibilityLabel="Cerrar el mensaje" hitSlop={8} onPress={callar} style={{ alignSelf: 'flex-end' }}>
-              <T size={12} weight={700} color={C.white}>
-                Entendido
-              </T>
-            </Pressable>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 16 }}>
+              {mensaje.accion ? (
+                <Pressable accessibilityRole="button" accessibilityLabel={mensaje.accion.texto} hitSlop={8} onPress={() => irA(mensaje.accion?.ruta ?? '/')}>
+                  <T size={12} weight={800} color={C.amber}>
+                    {mensaje.accion.texto}
+                  </T>
+                </Pressable>
+              ) : null}
+              <Pressable accessibilityRole="button" accessibilityLabel="Cerrar el mensaje" hitSlop={8} onPress={callar}>
+                <T size={12} weight={700} color={C.white}>
+                  Entendido
+                </T>
+              </Pressable>
+            </View>
           </View>
         ) : null}
         <Boti pose={pose} size={TAM} onPress={darConsejo} emocion={emocion} alEmocionar={alEmocionar} />

@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import type { LineaPedido, Pedido } from '../../data/tipos';
 import { abrirMapas, abrirTelefono } from '../../lib/geo';
 import { cantidadConUnidad, dinero, esActivo, etiquetaEstado, textoPago } from '../../lib/pedidos';
-import { useStore, type AccionPedido } from '../../store';
+import { OTRO_NEGOCIO, useStore, type AccionPedido } from '../../store';
 import { horaCorta, haceCuanto } from '../../ui/bits';
 import { Confirmar } from '../../ui/Dialogo';
 import { BackBtn, Btn, Card, Group, goBack, Screen, Tag } from '../../ui/kit';
@@ -53,7 +53,7 @@ function explicacion(p: Pedido, rol: Rol, negocio: string): string {
 
 export default function DetallePedido() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { s, cuenta, accionPedido, lineasDe, datosPagoDe } = useStore();
+  const { s, cuenta, accionPedido, lineasDe, datosPagoDe, agregarAlCarrito, avisar } = useStore();
   const p = s.pedidos.find((x) => x.id === id);
   const [lineas, setLineas] = useState<LineaPedido[] | null>(null);
   const [datos, setDatos] = useState<string | null | undefined>(undefined);
@@ -61,6 +61,8 @@ export default function DetallePedido() {
   const [ocupado, setOcupado] = useState(false);
   const [confirmar, setConfirmar] = useState<null | 'cancelar-cliente' | 'completar' | 'no-llego'>(null);
   const [pedir, setPedir] = useState<null | 'rechazar' | 'cancelar-negocio' | 'reportar' | 'no-veo-pago'>(null);
+  /** «Pedir otra vez» chocó con un carrito de otra tienda: se pregunta si se vacía. */
+  const [otroCarrito, setOtroCarrito] = useState(false);
 
   const estadoActual = p?.estado;
   const necesitaDatos = !!p && !!cuenta && p.clienteId === cuenta.id && p.pago === 'transferencia' && (estadoActual === 'aceptado' || estadoActual === 'listo');
@@ -114,6 +116,48 @@ export default function DetallePedido() {
     const err = await accionPedido(p.id, accion, texto);
     setOcupado(false);
     if (err) setError(err);
+  }
+
+  /** «Pedir otra vez»: pone en el carrito lo mismo que se pidió, con lo que todavía haya, y abre el carrito para revisarlo. */
+  async function pedirOtraVez(vaciar: boolean) {
+    if (!p || ocupado) return;
+    setError('');
+    setOcupado(true);
+    try {
+      const ls = lineas && lineas.length > 0 ? lineas : await lineasDe(p.id);
+      if (!ls || ls.length === 0) {
+        setError('No pudimos leer los productos de este pedido. Revisa tu internet e inténtalo otra vez.');
+        return;
+      }
+      const faltan: string[] = [];
+      let primerMotivo = '';
+      let agregados = 0;
+      for (const l of ls) {
+        if (!l.productoId) {
+          faltan.push(l.nombre);
+          continue;
+        }
+        const r = agregarAlCarrito(l.productoId, l.cantidad, vaciar);
+        if (r === OTRO_NEGOCIO) {
+          setOtroCarrito(true);
+          return;
+        }
+        if (r) {
+          faltan.push(l.nombre);
+          primerMotivo = primerMotivo || r;
+          continue;
+        }
+        agregados += 1;
+      }
+      if (agregados === 0) {
+        setError(primerMotivo || 'Ningún producto de este pedido está disponible ahora.');
+        return;
+      }
+      if (faltan.length > 0) avisar(`No se pudo agregar: ${faltan.slice(0, 3).join(', ')}${faltan.length > 3 ? '…' : ''}.`);
+      router.push('/carrito');
+    } finally {
+      setOcupado(false);
+    }
   }
 
   const verChat = () => {
@@ -257,6 +301,7 @@ export default function DetallePedido() {
         {/* acciones del cliente */}
         {rol === 'cliente' ? (
           <View style={{ gap: 10 }}>
+            {p.estado === 'completado' && negocio ? <Btn label="Pedir otra vez" onPress={ocupado ? undefined : () => void pedirOtraVez(false)} /> : null}
             {necesitaDatos && p.pagoEstado === 'por_pagar' ? <Btn label="Ya pagué" onPress={ocupado ? undefined : () => setPedir('reportar')} /> : null}
             <Btn label="Escribir al negocio" variant="outline" onPress={verChat} />
             {p.entrega === 'recoger' && negocio ? <Btn label="Cómo llegar" variant="outline" onPress={() => abrirMapas(negocio)} /> : null}
@@ -302,6 +347,18 @@ export default function DetallePedido() {
         )}
       </View>
 
+      <Confirmar
+        visible={otroCarrito}
+        titulo="Tu carrito es de otra tienda"
+        texto={`Un pedido es de una sola tienda. ¿Vaciamos tu carrito para pedir otra vez en «${nombreNegocio}»?`}
+        confirmar="Sí, vaciar y pedir"
+        cancelar="No"
+        onCancelar={() => setOtroCarrito(false)}
+        onConfirmar={() => {
+          setOtroCarrito(false);
+          void pedirOtraVez(true);
+        }}
+      />
       <Confirmar
         visible={confirmar === 'cancelar-cliente'}
         titulo="¿Cancelar tu pedido?"

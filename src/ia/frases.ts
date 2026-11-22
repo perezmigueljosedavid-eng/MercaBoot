@@ -20,6 +20,12 @@ export interface Parcial {
   ok?: boolean;
   /** La receta pedida no está en el recetario: la IA puede escribirla. */
   ia?: PeticionIA;
+  /** «Avísame cuando haya aguacate»: el producto que la pantalla debe guardar para avisar después. */
+  alerta?: string;
+  /** «Ya no me avises de aguacate»: el aviso que la pantalla debe quitar. */
+  quitarAlerta?: string;
+  /** Lo que se buscó y nadie tiene publicado (solo texto, sin datos de la persona): sirve para «lo que buscan y no encuentran». */
+  sinResultado?: string[];
 }
 
 /** Elige una frase según el turno, para que el asistente no repita siempre lo mismo. */
@@ -100,13 +106,14 @@ export function gruposInicio(ahora: Date): GrupoIdeas[] {
     { titulo: 'Lo que lleva', chips: ['Algo con carne', 'Algo con proteína', 'Algo de solo verduras', 'Algo ligero'] },
     { titulo: 'Cuidar el bolsillo', chips: ['Algo barato', '¿Dónde sale más barato?'] },
     { titulo: 'Más ideas', chips: antojos },
-    { titulo: 'Tiendas', chips: ['Tiendas mejor calificadas', 'Tiendas cerca de mí', 'Tiendas con servicio a domicilio'] },
+    { titulo: 'Tiendas', chips: ['Tiendas mejor calificadas', 'Tiendas cerca de mí', '¿Qué tiendas están abiertas?', 'Tiendas con servicio a domicilio'] },
+    { titulo: 'Mi mandado y avisos', chips: ['Mi mandado: huevo, tortillas, jitomate', 'Avísame cuando haya aguacate'] },
   ];
 }
 
 /** Las mismas ideas en una sola lista, de las más usadas a las menos. */
 export function chipsInicio(ahora: Date): string[] {
   const g = gruposInicio(ahora);
-  const orden = ['Cuidar el bolsillo', 'Lo que lleva', 'Para comer', 'Más ideas', 'Tiendas'];
+  const orden = ['Cuidar el bolsillo', 'Lo que lleva', 'Para comer', 'Más ideas', 'Tiendas', 'Mi mandado y avisos'];
   return orden.flatMap((t) => g.find((x) => x.titulo === t)?.chips ?? []);
 }
