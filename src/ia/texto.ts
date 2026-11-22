@@ -49,9 +49,8 @@ export function palabraCoincide(texto: string, dic: string, tolerar = true): 0 |
 }
 
 /** Busca la frase (ya en palabras) dentro del texto. Devuelve la calidad de la coincidencia y dónde empieza, o null. */
-export function encontrarFrase(texto: string[], frase: string[]): { calidad: number; desde: number } | null {
+export function encontrarFrase(texto: string[], frase: string[], tolerar = frase.length === 1): { calidad: number; desde: number } | null {
   if (!frase.length || texto.length < frase.length) return null;
-  const tolerar = frase.length === 1;
   for (let i = 0; i + frase.length <= texto.length; i++) {
     let total = 0;
     let ok = true;

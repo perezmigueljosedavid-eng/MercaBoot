@@ -1,11 +1,11 @@
 import { festividad } from '../data/festividades';
 import { avisosVista } from './consultas';
 import type { Entendido } from './entender';
-import { evaluar, Evaluada, Filtros, itemsListos, momentoDeLaHora, pidioAlgoConcreto, recomendar, vistaDonde, vistaReceta } from './evaluar';
+import { evaluar, Evaluada, Filtros, itemsListos, momentoDeLaHora, pidioAlgoConcreto, preparadosComo, recomendar, vistaDonde, vistaReceta } from './evaluar';
 import { Ctx, lista, MENSAJE_SIN_PRODUCTOS, mayus, Parcial, PARA_MOMENTO, pick, TEXTO_SABOR } from './frases';
 import { nombreIngrediente } from './ingredientes';
 import { receta, RECETAS } from './recetas';
-import type { Momento } from './recetas';
+import type { Momento, Receta } from './recetas';
 import type { Bloque } from './vista';
 
 const unicos = <A>(l: A[]) => [...new Set(l)];
@@ -302,27 +302,61 @@ export function sugerir(e: Entendido, ctx: Ctx, soloModificar = false, refiere =
 
 /* ───────── "cómo se hace…", "receta de…" ───────── */
 
-export function recetaNombrada(e: Entendido, ctx: Ctx): Parcial {
+/**
+ * Muestra una receta completa: la receta con sus pasos, para cuántos alcanza, qué falta en las tiendas y,
+ * si alguna tienda ya lo vende preparado, dónde.
+ */
+export function mostrarReceta(
+  r: Receta,
+  ctx: Ctx,
+  o: { intro: string; personas?: number; tengo: Set<string>; otras?: Receta[]; palabras?: string[]; chipsExtra?: string[] },
+): Parcial {
   const { cat, mem } = ctx;
-  const tengo = new Set(e.tengo ? e.grupos.flat() : []);
-  const [primera, ...otras] = e.recetas;
-  const ev = evaluar(primera, cat, tengo);
+  const ev = evaluar(r, cat, o.tengo);
   const bloques: Bloque[] = [
-    { t: 'texto', texto: pick([`Claro, así se prepara **${primera.nombre}**:`, `Va la receta de **${primera.nombre}**:`, `**${primera.nombre}**, ¡buena elección! Mira:`], mem.turno) },
+    { t: 'texto', texto: o.intro },
     { t: 'receta', receta: vistaReceta(ev), verPasos: true },
   ];
   const notas: string[] = [];
-  const personas = e.personas ?? mem.personas;
-  if (personas) notas.push(textoPorciones(primera.por, personas));
+  if (o.personas) notas.push(textoPorciones(r.por, o.personas));
   if (!cat.items.length) notas.push('Todavía no hay productos publicados en las tiendas, así que no sé dónde conseguir los ingredientes; en cuanto los suban te lo digo.');
   else if (ev.faltan.length) notas.push(`Por ahora ninguna tienda tiene publicado: ${lista(ev.faltan.map((x) => x.txt.toLowerCase()))}.`);
-  if (otras.length) notas.push(`También tengo ${lista(otras.map((o) => `**${o.nombre}**`))}, por si buscabas otra.`);
+  if (o.otras?.length) notas.push(`También tengo ${lista(o.otras.map((x) => `**${x.nombre}**`))}, por si buscabas otra.`);
   if (notas.length) bloques.push({ t: 'texto', texto: notas.join(' ') });
+
+  // Si alguna tienda ya lo vende preparado, se dice dónde (sin quitarle la receta a quien quiere cocinar)
+  const listos = o.palabras?.length ? preparadosComo(cat, o.palabras) : [];
+  if (listos.length) {
+    bloques.push({ t: 'texto', texto: '¿No quieres cocinarlo? Ya preparado lo tienen:' }, { t: 'productos', items: listos.map((i) => vistaDonde(i)) });
+  }
   return {
     bloques,
-    chips: ['¿Dónde lo compro?', 'Otra opción', ...(otras[0] ? [`Receta de ${otras[0].nombre}`] : [])],
-    mem: { ultimaReceta: primera.id, recetasMostradas: unicos([...mem.recetasMostradas, primera.id]), personas, tengo: [...tengo], modo: 'recetas' },
+    chips: ['¿Dónde lo compro?', 'Otra opción', ...(o.chipsExtra ?? [])],
+    mem: { ultimaReceta: r.id, recetasMostradas: unicos([...mem.recetasMostradas, r.id]), personas: o.personas, tengo: [...o.tengo], modo: 'recetas' },
   };
+}
+
+export function recetaNombrada(e: Entendido, ctx: Ctx): Parcial {
+  const { mem } = ctx;
+  const tengo = new Set(e.tengo ? e.grupos.flat() : []);
+  const [primera, ...otras] = e.recetas;
+  const intro = e.variantes
+    ? pick(
+        [
+          `Hay varias formas de preparar **${e.dicho || primera.nombre}**. Empiezo con **${primera.nombre}**:`,
+          `De **${e.dicho || primera.nombre}** tengo varias recetas. Esta es la primera, **${primera.nombre}**:`,
+        ],
+        mem.turno,
+      )
+    : pick([`Claro, así se prepara **${primera.nombre}**:`, `Va la receta de **${primera.nombre}**:`, `**${primera.nombre}**, ¡buena elección! Mira:`], mem.turno);
+  return mostrarReceta(primera, ctx, {
+    intro,
+    personas: e.personas ?? mem.personas,
+    tengo,
+    otras,
+    palabras: e.palabras,
+    chipsExtra: otras.slice(0, 2).map((o) => `Receta de ${o.nombre}`),
+  });
 }
 
 const SIN_ULTIMA: Parcial = {

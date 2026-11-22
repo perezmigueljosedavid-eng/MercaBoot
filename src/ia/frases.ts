@@ -2,7 +2,7 @@ import { enTemporada } from '../data/festividades';
 import type { Sabor } from '../data/tipos';
 import type { Catalogo } from './catalogo';
 import type { Momento } from './recetas';
-import type { Bloque, GrupoIdeas, Memoria } from './vista';
+import type { Bloque, GrupoIdeas, Memoria, PeticionIA } from './vista';
 
 /** Lo que cada parte del asistente recibe y devuelve. */
 export interface Ctx {
@@ -18,6 +18,8 @@ export interface Parcial {
   mem?: Partial<Memoria>;
   /** La búsqueda encontró lo que se pedía. */
   ok?: boolean;
+  /** La receta pedida no está en el recetario: la IA puede escribirla. */
+  ia?: PeticionIA;
 }
 
 /** Elige una frase según el turno, para que el asistente no repita siempre lo mismo. */

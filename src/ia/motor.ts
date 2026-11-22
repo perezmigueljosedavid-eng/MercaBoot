@@ -1,15 +1,16 @@
 import type { Catalogo } from './catalogo';
 import { avisos, cerca, hoy, ordenar, producto, tienda, tiendas } from './consultas';
 import { entender, Entendido } from './entender';
-import { buscarPorNombre } from './evaluar';
-import { CHIPS_INICIO, chipsInicio, Ctx, gruposInicio, Parcial, pick, resumenCatalogo, saludoHora } from './frases';
+import { buscarPorNombre, coincidenTodas } from './evaluar';
+import { CHIPS_INICIO, chipsInicio, Ctx, gruposInicio, lista, Parcial, pick, resumenCatalogo, saludoHora } from './frases';
 import { receta } from './recetas';
-import { dondeComprar, pasos, recetaNombrada, sugerir, textoPorciones } from './sugerencias';
+import type { Receta } from './recetas';
+import { dondeComprar, mostrarReceta, pasos, recetaNombrada, sugerir, textoPorciones } from './sugerencias';
 import { norm } from './texto';
-import { MEMORIA_INICIAL, Memoria, Respuesta } from './vista';
+import { MEMORIA_INICIAL, Memoria, PeticionIA, Respuesta } from './vista';
 
 export { MEMORIA_INICIAL } from './vista';
-export type { Bloque, Memoria, Respuesta } from './vista';
+export type { Bloque, Memoria, PeticionIA, Respuesta } from './vista';
 
 export interface Opciones {
   ahora?: Date;
@@ -98,6 +99,9 @@ function ingrediente(e: Entendido, ctx: Ctx): Parcial {
       };
     }
     a.bloques.push({ t: 'texto', texto: 'Si ya lo tienes en casa, dime «tengo ...» y busco recetas con eso.' });
+    // Si lo que buscaba es un platillo (sopes, tlayudas), se le ofrece la receta para hacerlo en casa
+    const dicho = e.dicho.trim();
+    if (dicho && dicho.split(/\s+/).length <= 3 && !e.pideReceta) a.chips = [`Receta de ${dicho}`, ...a.chips];
     return a;
   }
   const b = sugerir({ ...e, tipo: 'sugerir' }, ctx);
@@ -125,6 +129,33 @@ function recetaDesconocida(e: Entendido, ctx: Ctx): Parcial {
       },
     ],
     chips: CHIPS_INICIO.slice(0, 4),
+  };
+}
+
+/**
+ * Pidió un platillo que no está en el recetario («galletas de naranja con cardamomo»). Lo que se devuelve aquí es lo que se
+ * muestra si la IA no puede escribirlo; si puede, la pantalla la consulta con `ia` y cambia esto por la receta.
+ */
+function platilloSinReceta(e: Entendido, ctx: Ctx): Parcial {
+  const p = e.platillo;
+  if (!p) return nada(e, ctx);
+  // Si lo escrito es el nombre de un producto que una tienda ya publicó («cubetas»), se busca como producto
+  if (!e.pideReceta && e.palabras.length && ctx.cat.items.length && coincidenTodas(ctx.cat, e.palabras).length) {
+    return producto({ ...e, tipo: 'producto' }, ctx);
+  }
+  const cercanas = e.cercanas.slice(0, 3);
+  const base = `Todavía no tengo la receta de «${p.consulta}» en mi recetario.`;
+  return {
+    bloques: [
+      {
+        t: 'texto',
+        texto: cercanas.length
+          ? `${base} Estas se le parecen: ${lista(cercanas.map((r) => `**${r.nombre}**`))}. Toca una para ver su receta.`
+          : `${base} Puedo proponerte otras con lo que hay hoy en las tiendas; cuéntame si se te antoja algo dulce, salado o picante, o qué ingredientes tienes.`,
+      },
+    ],
+    chips: [...cercanas.map((r) => `Receta de ${r.nombre}`), ...CHIPS_INICIO.slice(0, 3)],
+    ia: { consulta: p.consulta, clave: p.clave },
   };
 }
 
@@ -222,6 +253,9 @@ export function responder(texto: string, cat: Catalogo, memoria: Memoria = MEMOR
     case 'receta_desconocida':
       p = recetaDesconocida(e, ctx);
       break;
+    case 'platillo_sin_receta':
+      p = platilloSinReceta(e, ctx);
+      break;
     case 'sugerir':
       p = sugerir(e, ctx, false, refiere);
       break;
@@ -234,5 +268,41 @@ export function responder(texto: string, cat: Catalogo, memoria: Memoria = MEMOR
   if (e.dieta === 'carne' && !e.vegetariano) mem.vegetariano = false;
   if (e.personas) mem.personas = e.personas;
   const largo = e.tipo === 'saludo' || e.tipo === 'ayuda';
-  return { bloques: p.bloques, sugerencias: p.chips.slice(0, largo ? 12 : 5), memoria: mem };
+  return { bloques: p.bloques, sugerencias: p.chips.slice(0, largo ? 12 : 5), memoria: mem, ...(p.ia ? { ia: p.ia } : {}) };
+}
+
+/* ───────── receta escrita por la IA ───────── */
+
+/** Cambia la respuesta provisional por la receta que escribió la IA (o que ya estaba guardada de otra vez). */
+export function responderConRecetaIA(r: Receta, pedido: PeticionIA, cat: Catalogo, memoria: Memoria = MEMORIA_INICIAL, opciones: Opciones = {}): Respuesta {
+  const ctx: Ctx = { cat, mem: memoria, ahora: opciones.ahora ?? new Date(), nombre: opciones.nombre };
+  const p = mostrarReceta(r, ctx, {
+    intro: `Esa receta no estaba en mi recetario, así que la escribió la IA de Mercaboot. Revísala antes de cocinar:`,
+    personas: memoria.personas,
+    tengo: new Set(memoria.tengo),
+    palabras: pedido.clave.split(' '),
+  });
+  const mem: Memoria = { ...memoria, ...(p.mem ?? {}), turno: memoria.turno + 1 };
+  return { bloques: p.bloques, sugerencias: p.chips.slice(0, 5), memoria: mem };
+}
+
+/** Por qué no se pudo escribir la receta. */
+export type MotivoSinIA = 'no_es_comida' | 'sin_sesion' | 'limite' | 'limite_diario' | 'no_activada' | 'no_disponible';
+
+const TEXTO_MOTIVO: Record<MotivoSinIA, (consulta: string) => string> = {
+  no_es_comida: (c) => `«${c}» no me suena a un platillo ni a una bebida que se pueda preparar. Prueba con el nombre del platillo, por ejemplo «galletas de naranja» o «sopa de calabaza».`,
+  sin_sesion: (c) => `Todavía no tengo la receta de «${c}». Para que pueda escribir recetas nuevas necesitas haber iniciado sesión en tu cuenta de Mercaboot.`,
+  limite: (c) => `Todavía no tengo la receta de «${c}», y en este momento llevas muchas recetas nuevas en poco tiempo. Espera un minuto y vuelve a intentarlo.`,
+  limite_diario: (c) => `Todavía no tengo la receta de «${c}». Hoy ya te escribí varias recetas nuevas y no puedo hacer más por hoy; mañana vuelvo a poder.`,
+  no_activada: (c) => `Todavía no tengo la receta de «${c}». Escribir recetas nuevas con IA aún no está activado en esta versión de Mercaboot; mientras tanto puedo proponerte otras con lo que hay en las tiendas.`,
+  no_disponible: (c) => `Todavía no tengo la receta de «${c}» y ahora no pude escribirla (puede ser la conexión o que el servicio esté ocupado). Inténtalo de nuevo en un rato.`,
+};
+
+/** La respuesta provisional, con el motivo por el que no se pudo escribir la receta. */
+export function responderSinRecetaIA(provisional: Respuesta, motivo: MotivoSinIA): Respuesta {
+  const consulta = provisional.ia?.consulta ?? '';
+  const [primero, ...resto] = provisional.bloques;
+  const cercanas = primero?.t === 'texto' ? primero.texto.split('Estas se le parecen:')[1] : undefined;
+  const texto = TEXTO_MOTIVO[motivo](consulta) + (cercanas ? ` Mientras tanto, estas se le parecen:${cercanas}` : '');
+  return { ...provisional, bloques: [{ t: 'texto', texto }, ...resto], ia: undefined };
 }

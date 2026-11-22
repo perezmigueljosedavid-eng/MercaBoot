@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, ScrollViewInstance, TextInput, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { bienvenida, responder } from '../ia/motor';
+import { bienvenida, responder, responderConRecetaIA, responderSinRecetaIA } from '../ia/motor';
 import { borrarHistorial, guardarHistorial, Historial, historialDe, historialVacio } from '../lib/historialIA';
+import { cargarRecetasIA, pedirRecetaIA } from '../lib/recetaIA';
 import { useCatalogo } from '../lib/usarDatos';
 import { useStore } from '../store';
 import { Bloques } from '../ui/Bloques';
@@ -22,7 +23,8 @@ export default function IdeasIA() {
   const insets = useSafeAreaInsets();
   const scroll = useRef<ScrollViewInstance>(null);
   const [texto, setTexto] = useState('');
-  const [pensando, setPensando] = useState(false);
+  /** Lo que se muestra mientras se prepara la respuesta; vacío si no se está esperando nada. */
+  const [pensando, setPensando] = useState<string | null>(null);
   const cuentaId = cuenta?.id ?? 'anonimo';
 
   const [h, setH] = useState<Historial>(() => {
@@ -40,10 +42,16 @@ export default function IdeasIA() {
   const vivo = useRef(true);
   useEffect(() => {
     vivo.current = true;
+    // Las recetas que la IA escribió otras veces se leen del teléfono para no volver a pedirlas
+    void cargarRecetasIA();
     return () => {
       vivo.current = false;
     };
   }, []);
+  /** Mientras se prepara una respuesta no se atiende otro mensaje. */
+  const ocupado = useRef(false);
+  /** Cambia al empezar una charla nueva: una respuesta que llega tarde de la charla anterior se descarta. */
+  const charla = useRef(0);
 
   const poner = useCallback(
     (sig: Historial) => {
@@ -57,22 +65,35 @@ export default function IdeasIA() {
   const enviar = useCallback(
     (mensaje: string) => {
       const limpio = mensaje.trim();
-      if (!limpio) return;
+      if (!limpio || ocupado.current) return;
+      ocupado.current = true;
+      const miCharla = charla.current;
       const antes = hRef.current;
       poner({ ...antes, turnos: [...antes.turnos, { id: nuevoId(), quien: 'yo', texto: limpio }], sugerencias: [] });
       setTexto('');
-      setPensando(true);
-      setTimeout(() => {
-        const act = hRef.current;
-        const r = responder(limpio, catRef.current, act.memoria, { nombre: cuenta?.nombre });
-        if (vivo.current) setPensando(false);
-        poner({
-          ...act,
-          turnos: [...act.turnos, { id: nuevoId(), quien: 'ia', bloques: r.bloques }],
-          memoria: r.memoria,
-          sugerencias: r.sugerencias,
-        });
-      }, 450);
+      setPensando('Pensando…');
+      void (async () => {
+        try {
+          // Una pausa corta para que la respuesta no aparezca de golpe, y de paso se leen las recetas guardadas
+          await Promise.all([cargarRecetasIA(), new Promise((listo) => setTimeout(listo, 450))]);
+          const act = hRef.current;
+          const opciones = { nombre: cuenta?.nombre };
+          let r = responder(limpio, catRef.current, act.memoria, opciones);
+          if (r.ia) {
+            // Un platillo que no está en el recetario: la IA escribe la receta (si no puede, se explica por qué)
+            const pedido = r.ia;
+            if (vivo.current) setPensando(`Escribiendo la receta de «${pedido.consulta}»… puede tardar unos segundos`);
+            const res = await pedirRecetaIA(pedido);
+            r = res.ok ? responderConRecetaIA(res.receta, pedido, catRef.current, act.memoria, opciones) : responderSinRecetaIA(r, res.motivo);
+          }
+          if (charla.current !== miCharla) return;
+          const ult = hRef.current;
+          poner({ ...ult, turnos: [...ult.turnos, { id: nuevoId(), quien: 'ia', bloques: r.bloques }], memoria: r.memoria, sugerencias: r.sugerencias });
+        } finally {
+          ocupado.current = false;
+          if (vivo.current) setPensando(null);
+        }
+      })();
     },
     [poner, cuenta?.nombre],
   );
@@ -87,6 +108,7 @@ export default function IdeasIA() {
   }, [params.antojo, params.t, enviar, poner]);
 
   function reiniciar() {
+    charla.current += 1;
     borrarHistorial(cuentaId);
     const b = bienvenida(catRef.current, { nombre: cuenta?.nombre });
     poner({ ...historialVacio(), turnos: [{ id: nuevoId(), quien: 'ia', bloques: b.bloques }], memoria: b.memoria, sugerencias: b.sugerencias, ultimoEnvio: hRef.current.ultimoEnvio });
@@ -164,9 +186,9 @@ export default function IdeasIA() {
           ),
         )}
         {pensando ? (
-          <View style={{ alignSelf: 'flex-start', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 18, backgroundColor: C.white, borderWidth: 1, borderColor: C.line }}>
-            <T size={15} color={C.muted}>
-              Pensando…
+          <View style={{ alignSelf: 'flex-start', maxWidth: '86%', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 18, backgroundColor: C.white, borderWidth: 1, borderColor: C.line }}>
+            <T size={15} lh={1.4} color={C.muted}>
+              {pensando}
             </T>
           </View>
         ) : null}

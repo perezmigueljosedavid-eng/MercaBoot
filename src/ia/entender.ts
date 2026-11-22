@@ -1,10 +1,11 @@
 import { FESTIVIDADES_ASISTENTE } from '../data/festividades';
 import type { Negocio, Sabor } from '../data/tipos';
 import type { Criterio } from './comparar';
-import { ingredientesEnTexto, INGREDIENTES } from './ingredientes';
-import { RECETAS } from './recetas';
+import { ingredientesEnTexto } from './ingredientes';
+import { calzar, limpiarPlatillo, parecePlatillo } from './platillo';
+import type { PlatilloPedido } from './platillo';
 import type { Momento, Receta } from './recetas';
-import { buscarFrase, igual, norm, palabraCoincide, tokens } from './texto';
+import { buscarFrase, norm, palabraCoincide, tokens } from './texto';
 import type { Memoria } from './vista';
 
 export type Tipo =
@@ -24,6 +25,8 @@ export type Tipo =
   | 'sugerir'
   | 'ingrediente'
   | 'receta_desconocida'
+  /** Pidió un platillo que no está en el recetario: la IA puede escribirlo. */
+  | 'platillo_sin_receta'
   /** Ranking de tiendas: mejor calificadas, más baratas, con domicilio… */
   | 'tiendas'
   /** Volver a ordenar la última búsqueda de productos ("por precio", "por estrellas"). */
@@ -68,7 +71,14 @@ export interface Entendido {
   excluir: string[];
   /** La persona dijo que ya tiene esos ingredientes ("tengo pollo"). */
   tengo: boolean;
+  /** Recetas del recetario que son lo que pidió (por su nombre). */
   recetas: Receta[];
+  /** Hay varias formas de preparar lo que pidió («galletas»): se muestra la primera y se mencionan las otras. */
+  variantes: boolean;
+  /** Recetas que se parecen a lo que pidió pero no son: se ofrecen, nunca se muestran como si fueran la respuesta. */
+  cercanas: Receta[];
+  /** El platillo que pidió cuando no está en el recetario. */
+  platillo?: PlatilloPedido;
   negocios: Negocio[];
   /** Palabras sueltas para buscar por nombre de producto cuando el diccionario no lo conoce. */
   palabras: string[];
@@ -89,7 +99,9 @@ const V = {
   gracias: P('gracias|muchas gracias|mil gracias|te agradezco|perfecto|genial|excelente|super|ok|vale|listo|esta bien|muy bien|que rico|chido|padre|buenisimo'),
   despedida: P('adios|hasta luego|nos vemos|bye|chao|hasta pronto|me voy'),
   ayuda: P('ayuda|ayudame|que puedes hacer|que haces|como funcionas|para que sirves|que sabes|quien eres|que eres|como te uso|como funciona|que ofreces'),
-  pasos: P('como se hace|como lo hago|como la hago|como se prepara|como lo preparo|como la preparo|como se cocina|como lo cocino|como la cocino|paso a paso|pasos|procedimiento|preparacion|instrucciones|ingredientes|receta|recetas|como hago|como preparo|como cocino|como se elabora|como se hacen'),
+  pasos: P('como se hace|como lo hago|como la hago|como se prepara|como lo preparo|como la preparo|como se cocina|como lo cocino|como la cocino|paso a paso|pasos|procedimiento|preparacion|instrucciones|ingredientes|receta|recetas|como hago|como preparo|como cocino|como se elabora|como se hacen|como hacer|como preparar|como cocinar|como puedo hacer|como puedo preparar|como se preparan|como se cocinan|como elaborar'),
+  /** «Qué cocino con…», «qué preparo con…»: pide ideas con unos ingredientes, no un platillo por su nombre. */
+  ideasCon: P('que cocino con|que preparo con|que hago con|que puedo cocinar con|que puedo hacer con|que puedo preparar con|que cocinamos con|que preparamos con|que hacemos con|que se puede hacer con|que se puede cocinar con|que ceno con|que desayuno con|que como con|ideas con|ideas de comida con|recetas con|con que cocino|con que preparo'),
   donde: P('donde|en que tienda|que tienda|quien vende|quien tiene|venden|vende|tienen|tiene|consigo|conseguir|encuentro|encontrar|compro|comprar|comprarlo|comprarla|hay|busco|buscando|necesito|ocupo|me falta|existen|hay en'),
   otra: P('otra|otro|otras|otros|otra opcion|otras opciones|otra idea|otras ideas|mas ideas|algo mas|que mas|no me gusta|no quiero eso|diferente|distinto|siguiente|cambia|cambiale|y otra|alguna otra|otra receta|mejor'),
   hoy: P('que hay hoy|que hay|que tienen hoy|que venden|que productos hay|que hay disponible|que tienen|que hay de nuevo|productos de hoy|que hay en las tiendas|que se vende|todo lo que hay|que encuentro'),
@@ -221,92 +233,6 @@ export function negociosEn(t: string[], negocios: Negocio[]): Negocio[] {
   return res.filter((r) => r.m === max).map((r) => r.n);
 }
 
-const PARTICULAS = new Set(['de', 'con', 'y', 'en', 'al', 'a', 'la', 'el', 'las', 'los', 'del', 'o']);
-
-/** Palabras que describen cómo está un platillo pero no lo identifican ("caliente", "verde"…). */
-const NO_PLATO = new Set([
-  'caliente', 'frio', 'frito', 'frita', 'dulce', 'salado', 'rojo', 'roja', 'rojos', 'verde', 'verdes', 'mexicana', 'mexicano',
-  'oaxaquena', 'oaxaqueno', 'fresca', 'fresco', 'rapido', 'facil', 'casa', 'simple', 'tradicional', 'cocido', 'cocida',
-]);
-
-/** Palabras de ingredientes que, al pedir una receta, se entienden como un platillo ("receta de tlayudas"). */
-const ALIAS_PLATO: [string, string[]][] = [
-  ['tlayuda', ['tlayuda-tasajo']],
-  ['tostada', ['tostadas-pollo', 'tostadas-atun', 'tinga-pollo']],
-  ['memela', ['memelas-frijol']],
-  ['sope', ['sopes-frijol-queso']],
-  ['mole', ['pollo-mole']],
-  ['torta', ['tortas-quesillo-aguacate']],
-  ['frijol', ['frijoles-olla', 'enfrijoladas']],
-  ['arroz', ['arroz-rojo', 'arroz-con-leche']],
-  ['bistec', ['bistec-encebollado', 'tacos-bistec']],
-  ['elote', ['elote-cocido', 'esquites']],
-  ['chocolate', ['chocolate-pan-yema']],
-  ['atole', ['atole-masa']],
-  ['champurrado', ['atole-masa']],
-  ['cafe', ['cafe-de-olla']],
-  ['hotcakes', ['hotcakes-miel-platano']],
-  ['jamaica', ['agua-jamaica']],
-  ['nopal', ['ensalada-nopales']],
-  ['camote', ['camotes-piloncillo']],
-  ['calabaza', ['calabaza-tacha']],
-  ['pescado', ['pescado-ajo-limon']],
-  ['camaron', ['camarones-ajillo']],
-  ['milanesa', ['milanesas']],
-  ['chuleta', ['chuletas-salsa-verde']],
-  ['chicharron', ['chicharron-salsa-verde']],
-  ['papa', ['papas-chorizo', 'tacos-dorados-papa']],
-  ['sopa', ['sopa-pasta']],
-  ['pollo', ['pollo-mole', 'caldo-pollo', 'tostadas-pollo', 'tinga-pollo']],
-];
-
-let GENERICAS: string[] | null = null;
-/** Palabra que es el nombre de un ingrediente ("pollo", "huevos"): sola no basta para pedir una receta. */
-function esGenerica(w: string): boolean {
-  if (!GENERICAS) {
-    const set = new Set<string>();
-    for (const ing of Object.values(INGREDIENTES)) {
-      if (ing.cat === 'preparado' || ing.platillo) continue;
-      for (const f of ing.frases) if (f.length === 1) set.add(f[0]);
-    }
-    GENERICAS = [...set];
-  }
-  return GENERICAS.some((g) => igual(w, g));
-}
-
-/**
- * Recetas cuyo nombre aparece en el mensaje ("receta de tlayudas", "cómo hago pollo con mole").
- * Una palabra de ingrediente sola ("pollo") no cuenta: eso es buscar ideas con ese ingrediente.
- */
-export function recetasEn(t: string[], pideReceta = false): Receta[] {
-  const res: { r: Receta; puntos: number }[] = [];
-  for (const r of RECETAS) {
-    const clave = tokens(r.nombre).filter((w) => !PARTICULAS.has(w));
-    if (!clave.length) continue;
-    const coinciden = clave.map((w) => t.some((q) => palabraCoincide(q, w, w.length >= 7) > 0));
-    const exactas = clave.map((w) => t.some((q) => igual(q, w)));
-    const n = coinciden.filter(Boolean).length;
-    if (!n) continue;
-    const plato = clave.some((w, i) => exactas[i] && w.length >= 5 && !esGenerica(w) && !NO_PLATO.has(w));
-    const completa = n === clave.length;
-    if (!completa && !plato && !(n >= 2 && n / clave.length >= 0.6)) continue;
-    res.push({ r, puntos: n * 10 + (plato ? 5 : 0) - clave.length });
-  }
-  if (pideReceta) {
-    for (const [palabra, ids] of ALIAS_PLATO) {
-      if (!t.some((q) => igual(q, palabra))) continue;
-      for (const id of ids) {
-        const r = RECETAS.find((x) => x.id === id);
-        if (r && !res.some((x) => x.r.id === id)) res.push({ r, puntos: 12 });
-      }
-    }
-  }
-  res.sort((a, b) => b.puntos - a.puntos);
-  if (!res.length) return [];
-  const mejor = res[0].puntos;
-  return res.filter((x) => x.puntos >= mejor - 1).slice(0, 3).map((x) => x.r);
-}
-
 /* ───────── entender el mensaje ───────── */
 
 function ingredientes(texto: string): { grupos: string[][]; excluir: string[]; sinCarne: boolean } {
@@ -383,14 +309,38 @@ export function entender(texto: string, negocios: Negocio[], mem: Memoria): Ente
   const pideReceta = tiene(t, V.pasos);
   // "solo verduras" describe lo que se quiere, no pide "Sopa de verduras" por su nombre
   const palabrasTipo = new Set(soloVerduras ? V.soloVerduras.filter((f) => buscarFrase(t, f) > 0).flat() : []);
-  const recetas = recetasEn(palabrasTipo.size ? t.filter((w) => !palabrasTipo.has(w)) : t, pideReceta);
   // Las palabras que ya se entendieron como antojo ("dulce", "cocino") no sirven para adivinar la tienda ("Pastelería Dulce Vida")
   const lugares = negociosEn(t.filter((w) => !CONSUMIDAS.has(w)), negocios);
   const pideDonde = tiene(t, V.donde);
-  const palabras = t.filter((w) => w.length >= 3 && !esRelleno(w) && !(fiesta?.palabras.includes(w)));
-
+  const tengoDicho = tiene(t, V.tengo) && !/\bno\s+(?:tengo|tenemos|me queda|hay)\b/.test(n);
+  const quiereIdeas = tiene(t, V.ideasCon);
   const pideEstrellas = tiene(t, V.mejorCalif);
   const pideDondeBarato = tiene(t, V.dondeBarato);
+  // "mejor calificadas" o "mejor precio" llevan la palabra "mejor" pero no piden otra opción
+  const pideOtra = tiene(t, V.otra) && !pideEstrellas && !pideDondeBarato;
+
+  // ¿Escribió el nombre de un platillo? No si habla de lo que tiene, de qué cocinar con algo o de una tienda
+  const ignorar = palabrasTipo.size ? palabrasTipo : undefined;
+  const calce = calzar(texto, { pideReceta, ignorar });
+  const esPlatillo = (calce.tipo === 'exacta' || calce.tipo === 'variantes') && !tengoDicho && (pideReceta || (!quiereIdeas && !lugares.length));
+  const recetas = esPlatillo ? calce.recetas : [];
+  const cercanas = esPlatillo ? [] : calce.tipo === 'cercanas' ? calce.recetas : [];
+  const palabras = t.filter((w) => w.length >= 3 && !esRelleno(w) && !(fiesta?.palabras.includes(w)));
+
+  // ¿Suena a un platillo que no está en el recetario? (la IA puede escribirlo)
+  const limpio = limpiarPlatillo(texto);
+  const toksPlatillo = limpio.toks.filter((w) => !palabrasTipo.has(w));
+  const toksDish = toksPlatillo.filter((w) => !CONSUMIDAS.has(w) && !esRelleno(w));
+  const suenaAPlatillo =
+    !esPlatillo && !tengoDicho && !quiereIdeas && !pideOtra && !lugares.length && (!pideDonde || pideReceta) && !fiesta && parecePlatillo(toksDish, pideReceta, grupos.length > 0);
+  const platillo: PlatilloPedido | undefined = suenaAPlatillo
+    ? {
+        consulta: palabrasTipo.size ? limpio.consulta.split(/\s+/).filter((w) => !palabrasTipo.has(norm(w))).join(' ') : limpio.consulta,
+        toks: toksPlatillo,
+        clave: toksPlatillo.join(' '),
+      }
+    : undefined;
+
   const pidePrecio = tiene(t, V.masBarato) || pideDondeBarato;
   // "tiendas cerca de mí" pide un listado de tiendas; "más cerca" o "por cercanía" solo reordena
   const pideTiendas = t.includes('tienda') || t.includes('tiendas') || t.includes('negocio') || t.includes('negocios');
@@ -398,8 +348,6 @@ export function entender(texto: string, negocios: Negocio[], mem: Memoria): Ente
   const ordenar: Criterio | undefined = pidePrecio ? 'precio' : pideEstrellas ? 'estrellas' : ordenCerca ? 'cerca' : undefined;
   const domicilio = tiene(t, V.domicilio);
   const pideConviene = tiene(t, V.conviene);
-  // "mejor calificadas" o "mejor precio" llevan la palabra "mejor" pero no piden otra opción
-  const pideOtra = tiene(t, V.otra) && !pideEstrellas && !pideDondeBarato;
 
   const e: Entendido = {
     tipo: 'nada',
@@ -424,8 +372,11 @@ export function entender(texto: string, negocios: Negocio[], mem: Memoria): Ente
     personas: personasEn(n) ?? (tiene(t, V.familia) ? 6 : undefined),
     grupos,
     excluir,
-    tengo: tiene(t, V.tengo) && !/\bno\s+(?:tengo|tenemos|me queda|hay)\b/.test(n),
+    tengo: tengoDicho,
     recetas,
+    variantes: calce.tipo === 'variantes' && recetas.length > 1,
+    cercanas,
+    platillo,
     negocios: lugares,
     palabras,
     dicho: palabrasDichas(texto).join(' '),
@@ -449,7 +400,7 @@ export function entender(texto: string, negocios: Negocio[], mem: Memoria): Ente
     else if (pideConviene && mem.ultimaReceta && mem.modo === 'recetas' && palabras.length === 0) e.tipo = 'donde';
     else if (pideConviene && palabras.length === 0) e.tipo = 'tiendas';
     else if (pideOtra && (hayRecetasEnMemoria || mem.sabor || mem.momento)) e.tipo = 'otra';
-    else if (pideReceta && palabras.length) e.tipo = 'receta_desconocida';
+    else if (pideReceta && palabras.length) e.tipo = platillo ? 'platillo_sin_receta' : 'receta_desconocida';
     else if (mem.ultimaReceta && pideReceta) e.tipo = 'pasos';
     else if (pideDondeBarato && palabras.length === 0) e.tipo = 'tiendas';
     else if (mem.ultimaReceta && pideDonde && palabras.length === 0) e.tipo = 'donde';
@@ -458,6 +409,7 @@ export function entender(texto: string, negocios: Negocio[], mem: Memoria): Ente
     else if ((pideEstrellas || pidePrecio || domicilio) && palabras.length === 0) e.tipo = 'tiendas';
     else if (pideComparar && palabras.length) e.tipo = 'producto';
     else if (tiene(t, V.cerca) && palabras.every((w) => ['cerca', 'cercana', 'cercanas', 'cercano', 'cercanos', 'cerquita', 'ubicacion', 'aqui'].includes(w))) e.tipo = 'cerca';
+    else if (platillo && !pideComparar && !pideConviene) e.tipo = 'platillo_sin_receta';
     else if (tiene(t, V.hoy)) e.tipo = 'hoy';
     else if (tiene(t, V.sugerir) || tiene(t, V.cocinar)) e.tipo = 'sugerir';
     else if ((e.rapido || e.economico || e.vegetariano || e.caliente || e.personas) && hayRecetasEnMemoria) e.tipo = 'otra';
@@ -467,7 +419,7 @@ export function entender(texto: string, negocios: Negocio[], mem: Memoria): Ente
     return e;
   }
 
-  if (recetas.length && (!grupos.length || pideReceta)) {
+  if (recetas.length) {
     e.tipo = 'recetas';
     return e;
   }
@@ -477,6 +429,11 @@ export function entender(texto: string, negocios: Negocio[], mem: Memoria): Ente
   }
   if (tiene(t, V.avisos) && !grupos.length && !pideTipoPlatillo) {
     e.tipo = 'avisos';
+    return e;
+  }
+  // «Galletas de naranja con cardamomo», «pay de queso», «pollo en salsa de cacahuate»: un platillo que no está en el recetario
+  if (platillo && !pideTipoPlatillo && !e.festividad && !pideComparar) {
+    e.tipo = 'platillo_sin_receta';
     return e;
   }
   if (grupos.length) {

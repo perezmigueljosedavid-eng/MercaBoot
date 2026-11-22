@@ -32,7 +32,7 @@ const TABLA: Fila[] = [
 
   // ── lácteos
   ['quesillo', 'quesillo', 'lacteo', 'S', 'quesillo|queso oaxaca|queso de hebra|queso oaxaqueno|bola de quesillo|quesillo de oaxaca'],
-  ['queso', 'queso', 'lacteo', 'S', 'queso|queso fresco|queso panela|panela|queso ranchero|cotija|queso cotija|queso seco|queso anejo|queso de rancho|queso rallado|queso manchego|manchego|queso amarillo|queso chihuahua'],
+  ['queso', 'queso', 'lacteo', 'S', 'queso|queso fresco|queso panela|panela|queso ranchero|cotija|queso cotija|queso seco|queso anejo|queso de rancho|queso rallado|queso manchego|manchego|queso amarillo|queso chihuahua|mozzarella|queso mozzarella|queso para pizza|queso para gratinar|queso gratinado|parmesano|queso parmesano'],
   ['crema', 'crema', 'lacteo', '', 'crema|crema natural|crema acida|crema para batir|crema fresca|crema de rancho'],
   ['leche', 'leche', 'lacteo', '', 'leche|leche entera|leche deslactosada|leche de vaca|leche fresca|leche light|leche pasteurizada'],
   ['leche_condensada', 'leche condensada', 'despensa', 'D', 'leche condensada|lechera'],
@@ -82,6 +82,7 @@ const TABLA: Fila[] = [
   ['champinon', 'champiñones', 'verdura', 'S', 'champinon|champinones|hongos|hongo|setas'],
   ['brocoli', 'brócoli o coliflor', 'verdura', 'S', 'brocoli|coliflor'],
   ['camote', 'camote', 'verdura', 'D', 'camote|camotes|batata'],
+  ['hoja_tamal', 'hojas para tamal', 'verdura', 'S', 'hoja de maiz|hojas de maiz|hojas para tamal|hojas para tamales|hoja de platano|hojas de platano|totomoxtle|hoja para tamal|hoja de tamal'],
   ['chile_fresco', 'chile fresco', 'verdura', 'P', 'chile|chiles|chile verde|jalapeno|chile jalapeno|serrano|chile serrano|chile de agua|chile poblano|poblano|habanero|chile habanero|chile manzano|chile guero|guero|chile fresco|chilacas|morron|pimiento|pimiento morron'],
 
   // ── frutas
@@ -103,7 +104,7 @@ const TABLA: Fila[] = [
   ['frijol', 'frijol', 'despensa', 'S', 'frijol|frijoles|frijol negro|frijol bayo|frijol de olla|frijol en grano|frijoles refritos|frijolitos|frijol colorado|ayocote|ayocotes'],
   ['lenteja', 'lentejas o garbanzos', 'despensa', 'S', 'lenteja|lentejas|garbanzo|garbanzos|haba|habas|alubia|alubias'],
   ['maiz_pozolero', 'maíz pozolero', 'despensa', 'S', 'maiz pozolero|maiz para pozole|cacahuazintle|maiz cacahuazintle|maiz precocido|maiz blanco para pozole'],
-  ['pasta', 'pasta para sopa', 'despensa', 'S', 'pasta|sopa de pasta|sopa|espagueti|spaghetti|fideo|fideos|codito|coditos|macarron|tallarin|pluma|codos|letras|estrellitas|conchitas'],
+  ['pasta', 'pasta para sopa', 'despensa', 'S', 'pasta|sopa de pasta|sopa|espagueti|spaghetti|fideo|fideos|codito|coditos|macarron|tallarin|pluma|codos|letras|estrellitas|conchitas|lasana|lasagna|pasta para lasana|laminas de lasana|fettuccine|fetuccini|penne|alfredo'],
   ['avena', 'avena', 'despensa', '', 'avena|hojuelas de avena|avena en hojuelas|avena molida|quaker'],
   ['harina', 'harina de trigo', 'despensa', '', 'harina|harina de trigo|harina preparada'],
   ['hotcakes', 'mezcla para hot cakes', 'despensa', 'D', 'harina para hot cakes|harina para hotcakes|mezcla para hot cakes|mezcla para hotcakes|hot cakes|hotcakes|pancakes|hot cake'],
@@ -111,7 +112,7 @@ const TABLA: Fila[] = [
   ['azucar', 'azúcar', 'despensa', 'D', 'azucar|azucar morena|azucar glass|azucar mascabado|azucar refinada|bolsa de azucar'],
   ['piloncillo', 'piloncillo', 'despensa', 'D', 'piloncillo|piloncillos|panocha|cono de piloncillo'],
   ['canela', 'canela', 'despensa', 'D', 'canela|canela en raja|canela molida|raja de canela|rajas de canela|canela en polvo'],
-  ['chocolate', 'chocolate de mesa', 'despensa', 'DM', 'chocolate|chocolate de agua|chocolate de mesa|chocolate abuelita|abuelita|chocolate de leche|tablilla|tablillas|chocolate oaxaqueno|chocolate en barra|cocoa|cacao|cacao en polvo|chocolate en polvo|ibarra|chocolate amargo|nutella'],
+  ['chocolate', 'chocolate de mesa', 'despensa', 'DM', 'chocolate|chocolate de agua|chocolate de mesa|chocolate abuelita|abuelita|chocolate de leche|tablilla|tablillas|chocolate oaxaqueno|chocolate en barra|cocoa|cacao|cacao en polvo|chocolate en polvo|ibarra|chocolate amargo|nutella|chispas|chispas de chocolate|chocolate semiamargo|chocolate para reposteria'],
   ['miel', 'miel', 'despensa', 'D', 'miel|miel de abeja|miel de maiz|miel de agave|jarabe|maple'],
   ['cajeta', 'cajeta', 'despensa', 'D', 'cajeta|dulce de leche|cajeta quemada', 'l'],
   ['mermelada', 'mermelada', 'despensa', 'D', 'mermelada|mermeladas|jalea|ate|ates|ate de membrillo', 'l'],
@@ -140,6 +141,11 @@ const TABLA: Fila[] = [
   ['tamarindo', 'tamarindo', 'despensa', 'DA', 'tamarindo|tamarindos|pulpa de tamarindo|tamarindo en bola'],
   ['cafe', 'café', 'bebida', 'M', 'cafe|cafe molido|cafe soluble|nescafe|cafe de grano|cafe de olla|capuchino|americano|espresso|cafe americano|cafe con leche|latte|moka'],
   ['vainilla', 'vainilla', 'despensa', 'D', 'vainilla|esencia de vainilla|extracto de vainilla', 'c'],
+  ['leche_evaporada', 'leche evaporada', 'despensa', 'D', 'leche evaporada|evaporada|carnation|clavel'],
+  ['polvo_hornear', 'polvo para hornear', 'despensa', '', 'polvo para hornear|polvo de hornear|royal|bicarbonato|bicarbonato de sodio|levadura en polvo|impulsor'],
+  ['levadura', 'levadura', 'despensa', '', 'levadura|levadura fresca|levadura seca|levadura instantanea|levadura para pan'],
+  ['catsup', 'catsup y mostaza', 'despensa', 'S', 'catsup|ketchup|mostaza|aderezo|aderezos'],
+  ['vinagre', 'vinagre', 'despensa', 'A', 'vinagre|vinagre blanco|vinagre de manzana|vinagre de pina|vinagre de cana', 'c'],
 
   // ── bebidas
   ['refresco', 'refresco o jugo', 'bebida', 'D', 'refresco|refrescos|coca|coca cola|pepsi|sidral|fanta|sprite|jarritos|soda|boing|jugo|jugos|jumex|nectar|del valle|jugo de naranja|jugo natural|jugo de manzana|jugo de pina', 'l'],
@@ -218,12 +224,12 @@ interface Coincidencia {
 }
 
 /** Todas las coincidencias de un texto, de mayor a menor puntaje. */
-function coincidencias(texto: string[]): Coincidencia[] {
+function coincidencias(texto: string[], tolerar?: boolean): Coincidencia[] {
   const res: Coincidencia[] = [];
   for (const id of ORDEN) {
     let mejor: Coincidencia | null = null;
     for (const f of INGREDIENTES[id].frases) {
-      const m = encontrarFrase(texto, f);
+      const m = encontrarFrase(texto, f, tolerar);
       if (!m) continue;
       const letras = f.reduce((a, p) => a + p.length, 0);
       const puntos = f.length * 100 + letras + m.calidad;
@@ -281,6 +287,26 @@ export function perfilDeProducto(
 
 /** Palabras que describen sabor o momento y no deben leerse como ingrediente ("algo dulce"). */
 const NO_INGREDIENTE = new Set(['dulce', 'dulces', 'sopa', 'carne', 'pan', 'ensalada', 'agua', 'fruta', 'frutas', 'salsa', 'salsas']);
+
+/**
+ * Ingredientes del diccionario que corresponden al nombre de un ingrediente de receta («pechuga de pollo» → pollo).
+ * A diferencia de ingredientesEnTexto, incluye los básicos de casa (sal, aceite, azúcar…) y deja fuera los platillos y las bebidas alcohólicas.
+ */
+export function idsDeNombre(nombre: string): string[] {
+  const usadas = new Set<number>();
+  const res: string[] = [];
+  // Sin tolerar errores de dedo: «cardamomo molido» no es «carne molida». Y «mantequilla sin sal» es solo mantequilla
+  const limpio = nombre.replace(/\(.*?\)/g, ' ').replace(/\bsin\b.*$/i, ' ');
+  for (const c of coincidencias(tokens(limpio), false)) {
+    const ing = INGREDIENTES[c.id];
+    if (ing.platillo || ing.evitar || ing.cat === 'preparado') continue;
+    const posiciones = Array.from({ length: c.largo }, (_, i) => c.desde + i);
+    if (posiciones.every((p) => usadas.has(p))) continue;
+    posiciones.forEach((p) => usadas.add(p));
+    res.push(c.id);
+  }
+  return res;
+}
 
 /** Ingredientes que una persona menciona en un mensaje ("con pollo y quesillo"). */
 export function ingredientesEnTexto(texto: string): string[] {

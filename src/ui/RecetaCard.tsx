@@ -147,6 +147,11 @@ export function RecetaCard({
           {receta.min} min · {receta.por} {receta.por === 1 ? 'porción' : 'porciones'}
         </T>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+          {receta.ia ? (
+            <Tag bg={C.amberTint} fg={C.amberText}>
+              Receta sugerida por IA
+            </Tag>
+          ) : null}
           {receta.carac.map((c) => (
             <Tag key={c} bg={C.greenTint} fg={C.greenDark}>
               {c}
@@ -215,6 +220,24 @@ export function RecetaCard({
         <T size={12} lh={1.4} color={C.amberText}>
           Ojo: hoy no vi publicado {receta.faltan.join(', ')}. Puedes preguntar en las tiendas o buscar un sustituto.
         </T>
+      ) : null}
+
+      {receta.ia || receta.aviso ? (
+        <View style={{ gap: 4, padding: 12, borderRadius: 12, backgroundColor: C.amberTint }}>
+          {receta.ia ? (
+            <T size={12} lh={1.4} color={C.amberDeep}>
+              <T size={12} weight={700} color={C.amberDeep}>
+                Revisa esta receta antes de cocinar.{' '}
+              </T>
+              La escribió la IA de Mercaboot y el equipo todavía no la ha revisado.
+            </T>
+          ) : null}
+          {receta.aviso ? (
+            <T size={12} lh={1.4} color={C.amberDeep}>
+              {receta.aviso}
+            </T>
+          ) : null}
+        </View>
       ) : null}
 
       <Pressable

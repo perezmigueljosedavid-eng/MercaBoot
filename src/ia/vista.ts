@@ -62,6 +62,10 @@ export interface RecetaVista {
   ing: IngVista[];
   pasos: string[];
   tip?: string;
+  /** La escribió la IA de Mercaboot: se muestra con una etiqueta para que se revise antes de cocinar. */
+  ia?: boolean;
+  /** Recordatorio de seguridad (por ejemplo, cocer bien la carne y el huevo). */
+  aviso?: string;
   /** Todos los ingredientes principales se consiguen o ya se tienen. */
   completa: boolean;
   faltan: string[];
@@ -142,9 +146,22 @@ export interface Memoria {
 
 export const MEMORIA_INICIAL: Memoria = { turno: 0, recetasMostradas: [], ingredientes: [], excluir: [], tengo: [] };
 
+/** Una receta que no está en el recetario y que la IA puede escribir. */
+export interface PeticionIA {
+  /** Lo que se le manda a la IA: el nombre del platillo, ya sin relleno («galletas de naranja»). */
+  consulta: string;
+  /** La misma petición en palabras sin acentos, para reconocerla después. */
+  clave: string;
+}
+
 export interface Respuesta {
   bloques: Bloque[];
   /** Respuestas rápidas que se ofrecen debajo. */
   sugerencias: string[];
   memoria: Memoria;
+  /**
+   * La receta pedida no está en el recetario. Los bloques de arriba son lo que se muestra si la IA no puede ayudar;
+   * si puede, la pantalla se la pide con esta petición y reemplaza esos bloques por la receta.
+   */
+  ia?: PeticionIA;
 }

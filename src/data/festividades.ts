@@ -171,7 +171,7 @@ export const FESTIVIDADES: Festividad[] = [
     antes: 10,
     cuando: '30 de abril',
     tag: 'nino',
-    palabras: 'dia del nino|dia de los ninos|30 de abril|para los ninos|para mis hijos|para los pequenos|infantil',
+    palabras: 'dia del nino|dia de los ninos|30 de abril|para los ninos|para ninos|para ninas|para mis ninos|para mis hijos|para los pequenos|para los chiquitos|para los peques|infantil',
     motivo: 'Es el día de consentir a los más pequeños de la casa.',
     regalos: ['Un dulce', 'Una calcomanía', 'Un globo'],
     ideas: [

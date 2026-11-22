@@ -4,6 +4,7 @@ import { etiquetaDistancia } from '../lib/distancia';
 import { Catalogo, conIngredientes, Item, mejorPrimero, unoPorNegocio } from './catalogo';
 import { comparar, Insignia, ofertasPorTienda } from './comparar';
 import { INGREDIENTES } from './ingredientes';
+import { contradictorio } from './platillo';
 import type { IngReceta, Momento, Receta } from './recetas';
 import type { Reputacion } from './reputacion';
 import { norm, palabraCoincide } from './texto';
@@ -55,6 +56,35 @@ export function buscarPorNombre(cat: Catalogo, palabras: string[], soloNegocios?
   return res.filter((r) => r.pts === max).map((r) => r.it);
 }
 
+/** Productos cuyo nombre contiene todas las palabras (es lo que se busca, no solo algo parecido). */
+export function coincidenTodas(cat: Catalogo, palabras: string[]): Item[] {
+  const q = palabras.filter((w) => w.length >= 3);
+  if (!q.length) return [];
+  return cat.items.filter((it) => q.every((w) => it.palabras.some((x) => palabraCoincide(norm(w), x, x.length >= 6) > 0)));
+}
+
+/**
+ * Platillos, postres y bebidas que las tiendas ya tienen preparados y que se llaman como el platillo que se pidió
+ * («pastel de chocolate», «galletas»). Una receta distinta («salsa verde» si pidió «salsa roja») no cuenta.
+ */
+export function preparadosComo(cat: Catalogo, palabras: string[], max = 3): Item[] {
+  const q = palabras.filter((w) => w.length >= 3);
+  if (!q.length) return [];
+  const qn = q.map((w) => norm(w));
+  const minimo = Math.min(2, q.length);
+  const res: { it: Item; pts: number }[] = [];
+  for (const it of cat.items) {
+    if (it.tipo !== 'preparado' || it.evitar) continue;
+    let pts = 0;
+    for (const w of qn) if (it.palabras.some((x) => palabraCoincide(w, x, x.length >= 6) > 0)) pts++;
+    if (pts < minimo) continue;
+    if (contradictorio(qn, it.palabras)) continue;
+    res.push({ it, pts });
+  }
+  res.sort((a, b) => b.pts - a.pts || mejorPrimero(a.it, b.it));
+  return unoPorNegocio(res.map((x) => x.it)).slice(0, max);
+}
+
 /* ───────── evaluar una receta contra lo que hay ───────── */
 
 interface Parte {
@@ -87,11 +117,14 @@ export interface Evaluada {
 
 function estadoDe(ing: IngReceta, cat: Catalogo, tengo: Set<string>): { estado: EstadoIng; items: Item[] } {
   if (ing.ids.some((id) => tengo.has(id))) return { estado: 'tienes', items: [] };
-  if (ing.ids.every((id) => INGREDIENTES[id]?.casa)) return { estado: 'casa', items: [] };
-  const items = conIngredientes(
+  // Sin ids (un ingrediente que el diccionario no conoce, como en las recetas de la IA) no se puede decir que ya está en casa
+  if (ing.ids.length > 0 && ing.ids.every((id) => INGREDIENTES[id]?.casa)) return { estado: 'casa', items: [] };
+  const deDiccionario = conIngredientes(
     cat,
     ing.ids.filter((id) => !INGREDIENTES[id]?.casa),
   );
+  // Si el diccionario no lo conoce, se busca por el nombre con que el comerciante publicó el producto
+  const items = deDiccionario.length ? deDiccionario : ing.buscar?.length ? coincidenTodas(cat, ing.buscar) : [];
   if (items.length) return { estado: 'hay', items };
   if (ing.ids.some((id) => INGREDIENTES[id]?.casa)) return { estado: 'casa', items: [] };
   return { estado: 'falta', items: [] };
@@ -222,6 +255,8 @@ export function vistaReceta(ev: Evaluada): RecetaVista {
     }),
     pasos: ev.r.pasos,
     tip: ev.r.tip,
+    ia: ev.r.ia ? true : undefined,
+    aviso: ev.r.aviso || undefined,
     completa: ev.completa,
     faltan: ev.faltan.map((i) => i.txt),
     mejorTienda: ev.mejor && { ...tiendaVista(ev.mejor, ev.mejor.de), motivos: ev.mejor.motivos },
