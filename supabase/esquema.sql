@@ -5,6 +5,8 @@
 -- Se puede ejecutar más de una vez sin problema (no borra datos).
 -- (Si ya tenías instalado el Avance 2.1, basta con actualizacion-final.sql: deja la base exactamente igual que este archivo.
 --  Si venías del Avance 2, corre primero actualizacion-2-1.sql y después actualizacion-final.sql.)
+-- Versión 2: las secciones M y N (recetas con IA; tiendas con muchos productos y horario automático) vienen al final.
+--  Si ya tenías la versión final instalada, basta con correr actualizacion-receta-ia.sql y actualizacion-v2-productos.sql.
 --
 -- Qué crea:
 --   perfiles ........ datos de cada cuenta (nombre, teléfono, foto)
@@ -1658,12 +1660,16 @@ end $$;
 
 -- Un solo disparador para todas las tablas. Solo cuenta lo que la persona hace directamente
 -- (pg_trigger_depth() = 1): los cambios que la base hace sola por dentro (apartar productos, avisos de pedidos…) no cuentan.
+-- (Versión 2) Dos cambios respecto a la versión final: los cambios por lote (productos_actualizar_lote, productos_agregar_lote,
+-- actualizar_horarios) llevan su propio límite y marcan la transacción con «mercaboot.lote» para no contarse fila por fila,
+-- y un negocio puede tener hasta 1,500 productos (antes 500).
 create or replace function public.limite_escritura() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare
   v_uid uuid := auth.uid();
 begin
   if v_uid is null or pg_trigger_depth() <> 1 then return new; end if;
+  if current_setting('mercaboot.lote', true) is not distinct from txid_current()::text then return new; end if;
 
   if tg_table_name = 'mensajes' then
     -- Solo lo que escribe la persona; las tarjetas y avisos de pedidos los pone el sistema.
@@ -1674,8 +1680,8 @@ begin
 
   elsif tg_table_name = 'productos' then
     if tg_op = 'INSERT' then
-      if (select count(*) from public.productos p where p.negocio_id = new.negocio_id) >= 500 then
-        raise exception 'Un negocio puede tener hasta 500 productos. Quita alguno que ya no vendas para agregar otro.';
+      if (select count(*) from public.productos p where p.negocio_id = new.negocio_id) >= 1500 then
+        raise exception 'Un negocio puede tener hasta 1,500 productos. Quita alguno que ya no vendas para agregar otro.';
       end if;
       perform public._limite('productos_nuevos', 60, 600);
     else
@@ -1901,6 +1907,451 @@ grant execute on function public.lista_de_textos_cortos(text[], integer, integer
 -- El comerciante puede guardar estos campos desde la app (solo en sus productos, por las políticas de siempre).
 grant insert (descripcion, caracteristicas, foto_uri, medios) on public.productos to authenticated;
 grant update (descripcion, caracteristicas, foto_uri, medios) on public.productos to authenticated;
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- M) VERSIÓN 2 · RECETAS CON IA («Ideas para cocinar»)
+--    Es el mismo contenido de actualizacion-receta-ia.sql (para bases ya instaladas).
+-- ───────────────────────────────────────────────────────────────────────────
+
+-- ============================================================================
+-- Mercaboot · versión 2 · Recetas con IA («Ideas para cocinar»)
+-- Autor: José David Pérez Miguel
+--
+-- Esta actualización SOLO AGREGA cosas nuevas. No cambia ni borra nada de lo que ya existe,
+-- así que la app de la versión final y la de Boti con voz siguen funcionando igual.
+--
+-- Qué agrega:
+--   1) recetas_ia            Una receta guardada por cada cosa que se pidió (caché). Si dos personas piden lo mismo,
+--                            la segunda vez sale de aquí y no se vuelve a pagar a la IA.
+--                            No guarda quién la pidió: solo el texto del platillo y la receta.
+--   2) ia_limite()           Contador de uso por persona y global (reutiliza la tabla limites_uso).
+--   3) receta_ia_tocar()     Busca una receta guardada y suma una vista.
+--
+-- Todo queda cerrado: solo la función «receta-ia» (Edge Function de Supabase) puede leerlo o escribirlo.
+-- Las cuentas de la app no tienen permiso directo.
+-- ============================================================================
+
+-- 1) Caché de recetas escritas por la IA ------------------------------------
+create table if not exists public.recetas_ia (
+  id              uuid primary key default gen_random_uuid(),
+  clave           text not null,          -- lo que se pidió, en minúsculas y sin acentos
+  consulta        text not null,          -- lo que se pidió, ya limpio
+  receta          jsonb,                  -- la receta; vacío si lo pedido no era comida
+  rechazada       boolean not null default false,
+  modelo          text,
+  tokens_entrada  integer,
+  tokens_salida   integer,
+  costo_usd       numeric(10, 6),         -- costo estimado de escribirla (para llevar la cuenta del gasto)
+  usos            integer not null default 1,
+  creada          timestamptz not null default now(),
+  ultimo_uso      timestamptz not null default now(),
+  constraint recetas_ia_clave_unica unique (clave),
+  constraint recetas_ia_clave_largo check (char_length(clave) between 2 and 120),
+  constraint recetas_ia_consulta_largo check (char_length(consulta) between 2 and 120),
+  constraint recetas_ia_coherente check (rechazada or receta is not null)
+);
+
+comment on table public.recetas_ia is
+  'Recetas escritas por la IA (caché). Solo la función receta-ia la lee y la escribe. No guarda quién la pidió.';
+
+alter table public.recetas_ia enable row level security;
+revoke all on table public.recetas_ia from public, anon, authenticated;
+grant select, insert, update, delete on table public.recetas_ia to service_role;
+
+-- 2) Límite de uso: devuelve true si todavía puede, false si ya se pasó -----------------------------
+-- Para una persona se pasa su id; para el tope de todos juntos se usa el id vacío 000…000.
+-- Es una sola instrucción atómica: dos peticiones al mismo tiempo no se saltan el límite.
+create or replace function public.ia_limite(p_usuario uuid, p_clave text, p_tope integer, p_segundos integer)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_ok boolean;
+begin
+  if p_usuario is null or coalesce(p_tope, 0) < 1 or coalesce(p_segundos, 0) < 1 then
+    return false;
+  end if;
+
+  insert into public.limites_uso as l (usuario_id, clave, inicio, cuenta, tope, segundos)
+  values (p_usuario, left(p_clave, 60), now(), 1, p_tope, p_segundos)
+  on conflict (usuario_id, clave) do update set
+    inicio   = case when l.inicio + make_interval(secs => l.segundos) <= now() then now() else l.inicio end,
+    cuenta   = case when l.inicio + make_interval(secs => l.segundos) <= now() then 1 else l.cuenta + 1 end,
+    tope     = excluded.tope,
+    segundos = excluded.segundos
+  returning (l.cuenta <= l.tope) into v_ok;
+
+  return coalesce(v_ok, false);
+end $$;
+
+revoke execute on function public.ia_limite(uuid, text, integer, integer) from public, anon, authenticated;
+grant execute on function public.ia_limite(uuid, text, integer, integer) to service_role;
+
+-- 3) Buscar una receta guardada y sumar una vista --------------------------------------------------
+create or replace function public.receta_ia_tocar(p_clave text)
+returns table (receta jsonb, rechazada boolean)
+language sql
+security definer
+set search_path = public
+as $$
+  update public.recetas_ia
+     set usos = usos + 1, ultimo_uso = now()
+   where clave = p_clave
+  returning recetas_ia.receta, recetas_ia.rechazada;
+$$;
+
+revoke execute on function public.receta_ia_tocar(text) from public, anon, authenticated;
+grant execute on function public.receta_ia_tocar(text) to service_role;
+
+-- ----------------------------------------------------------------------------
+-- Para ver cuánto se ha gastado y qué piden más (se corre a mano en el editor SQL de Supabase):
+--
+--   select count(*) as recetas_nuevas, sum(costo_usd) as gasto_usd, sum(usos) as veces_pedidas
+--   from public.recetas_ia where creada > now() - interval '30 days';
+--
+--   select consulta, usos from public.recetas_ia where not rechazada order by usos desc limit 30;
+-- ----------------------------------------------------------------------------
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- N) VERSIÓN 2 · TIENDAS CON MUCHOS PRODUCTOS
+--    Es el mismo contenido de actualizacion-v2-productos.sql (para bases ya instaladas):
+--    foto_huella, cambios y altas por lote, y horario automático.
+-- ───────────────────────────────────────────────────────────────────────────
+
+-- 1) Huella de la foto -------------------------------------------------------------------------------------------------
+-- Se calcula sola cada vez que cambia la foto. Vacía = el producto no tiene foto.
+-- Nota: Postgres no manda las columnas calculadas en los avisos en tiempo real; esos avisos sí traen la foto completa.
+alter table public.productos
+  add column if not exists foto_huella text
+  generated always as (case when foto_uri is null then null else left(md5(foto_uri), 10) end) stored;
+
+comment on column public.productos.foto_huella is
+  'Huella corta de foto_uri (vacía si no hay foto). La app la usa para bajar la foto solo cuando se va a ver y saber si cambió.';
+
+-- 2) Límites: ver K.2 (limite_escritura ya trae los dos cambios de la versión 2).
+
+-- 3) Cambiar precios y existencia de muchos productos de golpe -----------------------------------------------------------
+-- p_cambios = [{"id": "…", "precio": 12.5, "disponible": true}, …]. De cada producto solo se cambia lo que venga:
+--   · «precio»      número (o null para quitarlo). Si no viene, se queda el precio de antes.
+--   · «disponible»  true o false. Si no viene, se queda como estaba.
+-- Solo el dueño del negocio puede usarla, solo toca productos de ese negocio y solo guarda lo que de verdad cambió
+-- (así los demás teléfonos no reciben avisos de más). Devuelve cuántos productos cambiaron.
+create or replace function public.productos_actualizar_lote(p_negocio text, p_cambios jsonb)
+returns integer
+language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_n integer;
+begin
+  if v_uid is null then raise exception 'Inicia sesión para continuar.'; end if;
+  if not exists (select 1 from public.negocios n where n.id = p_negocio and n.dueno_id = v_uid) then
+    raise exception 'Ese negocio no es tuyo.';
+  end if;
+  if p_cambios is null or jsonb_typeof(p_cambios) <> 'array' then
+    raise exception 'La lista de cambios no es válida.';
+  end if;
+  if jsonb_array_length(p_cambios) > 600 then
+    raise exception 'Son demasiados cambios juntos (máximo 600). Hazlos en partes.';
+  end if;
+
+  perform public._limite('productos_lotes', 30, 3600);
+  perform set_config('mercaboot.lote', txid_current()::text, true);
+
+  with e as (
+    select
+      case when jsonb_typeof(x -> 'id') = 'string'
+                and (x ->> 'id') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+           then (x ->> 'id')::uuid end as id,
+      case jsonb_typeof(x -> 'precio')
+        when 'null' then true
+        when 'number' then (x ->> 'precio')::numeric between 0 and 99999999.99
+        else false end as hay_precio,
+      case when jsonb_typeof(x -> 'precio') = 'number' then round((x ->> 'precio')::numeric, 2) end as precio,
+      (jsonb_typeof(x -> 'disponible') = 'boolean') as hay_disp,
+      case when jsonb_typeof(x -> 'disponible') = 'boolean' then (x ->> 'disponible')::boolean end as disponible
+    from jsonb_array_elements(p_cambios) x
+    where jsonb_typeof(x) = 'object'
+  ), d as (
+    select distinct on (id) id, hay_precio, precio, hay_disp, disponible
+    from e where id is not null
+    order by id
+  ), c as (
+    select p.id,
+           case when d.hay_precio then d.precio else p.precio end as precio,
+           case when d.hay_disp then d.disponible else p.disponible end as disponible
+    from d join public.productos p on p.id = d.id and p.negocio_id = p_negocio
+  )
+  update public.productos p
+     set precio = c.precio, disponible = c.disponible
+    from c
+   where p.id = c.id
+     and (p.precio is distinct from c.precio or p.disponible is distinct from c.disponible);
+
+  get diagnostics v_n = row_count;
+  return v_n;
+end $$;
+
+-- 4) Agregar muchos productos de golpe -----------------------------------------------------------------------------------
+-- p_productos = [{"nombre": "Tomate", "precio": 28, "unidad": "kilo", "categoria": "verduras", …}, …]
+-- Cada producto se revisa por separado: si no tiene nombre válido se cuenta como «invalido»; si ya existe uno con el mismo
+-- nombre (sin importar mayúsculas ni espacios) se cuenta como «repetido». Nada de eso detiene a los demás.
+-- Devuelve {"agregados": n, "repetidos": n, "invalidos": n}.
+create or replace function public.productos_agregar_lote(p_negocio text, p_productos jsonb)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_total integer;
+  v_validos integer;
+  v_agregados integer;
+begin
+  if v_uid is null then raise exception 'Inicia sesión para continuar.'; end if;
+  if not exists (select 1 from public.negocios n where n.id = p_negocio and n.dueno_id = v_uid) then
+    raise exception 'Ese negocio no es tuyo.';
+  end if;
+  if p_productos is null or jsonb_typeof(p_productos) <> 'array' then
+    raise exception 'La lista de productos no es válida.';
+  end if;
+  v_total := jsonb_array_length(p_productos);
+  if v_total > 300 then
+    raise exception 'Son demasiados productos juntos (máximo 300). Agrégalos en partes.';
+  end if;
+
+  perform public._limite('productos_lotes', 30, 3600);
+  perform set_config('mercaboot.lote', txid_current()::text, true);
+
+  with e as (
+    select
+      nullif(left(regexp_replace(btrim(x ->> 'nombre'), '\s+', ' ', 'g'), 120), '') as nombre,
+      case when jsonb_typeof(x -> 'precio') = 'number' and (x ->> 'precio')::numeric between 0 and 99999999.99
+           then round((x ->> 'precio')::numeric, 2) end as precio,
+      coalesce(nullif(left(btrim(x ->> 'unidad'), 60), ''), 'pieza') as unidad,
+      coalesce(nullif(left(btrim(x ->> 'categoria'), 30), ''), 'otro') as categoria,
+      case when jsonb_typeof(x -> 'disponible') = 'boolean' then (x ->> 'disponible')::boolean else true end as disponible,
+      case when jsonb_typeof(x -> 'por_encargo') = 'boolean' then (x ->> 'por_encargo')::boolean else false end as por_encargo,
+      case when x ->> 'tipo' in ('ingrediente', 'preparado') then x ->> 'tipo' end as tipo,
+      case when jsonb_typeof(x -> 'etiquetas') = 'array' then
+        coalesce((select array_agg(distinct t) from jsonb_array_elements_text(x -> 'etiquetas') t
+                  where t = any (array['dulce', 'salado', 'picante', 'acido', 'amargo', 'desayuno', 'comida', 'cena',
+                                       'botana', 'postre', 'bebida', 'carne', 'proteina', 'sinCarne', 'caliente']::text[])),
+                 '{}'::text[])
+        else '{}'::text[] end as etiquetas,
+      nullif(left(btrim(x ->> 'ingrediente'), 60), '') as ingrediente,
+      nullif(left(btrim(x ->> 'descripcion'), 500), '') as descripcion
+    from jsonb_array_elements(p_productos) x
+    where jsonb_typeof(x) = 'object'
+  ), v as (
+    select * from e where nombre is not null
+  ), ins as (
+    insert into public.productos (negocio_id, nombre, precio, unidad, disponible, categoria, por_encargo,
+                                  tipo, etiquetas, ingrediente, descripcion)
+    select p_negocio, nombre, precio, unidad, disponible, categoria, por_encargo, tipo, etiquetas, ingrediente, descripcion
+    from v
+    on conflict do nothing
+    returning 1
+  )
+  select (select count(*) from v), (select count(*) from ins) into v_validos, v_agregados;
+
+  -- Si con esto se pasara del tope, no se agrega nada (todo o nada).
+  if (select count(*) from public.productos p where p.negocio_id = p_negocio) > 1500 then
+    raise exception 'Un negocio puede tener hasta 1,500 productos. Quita alguno que ya no vendas para agregar otros.';
+  end if;
+
+  return jsonb_build_object('agregados', v_agregados, 'repetidos', v_validos - v_agregados, 'invalidos', v_total - v_validos);
+end $$;
+
+-- 5) Horario automático --------------------------------------------------------------------------------------------------
+-- horario_semana: 7 lugares, de domingo (0) a sábado (6). Cada uno es null (cerrado) o una lista de hasta 2 rangos
+--   [["08:00","14:00"], ["16:00","20:00"]]. Si un rango termina «antes» de empezar (["19:00","02:00"]) pasa de medianoche.
+--   «24:00» sirve como final del día.
+-- horario_auto:   si es verdadero, la base abre y cierra el negocio sola según ese horario (hora de Oaxaca).
+-- horario_ultimo: lo que decía el horario la última vez que se revisó. Solo cuando el horario CAMBIA (se abre o se cierra)
+--                 se mueve «abierto»; así, si el comerciante abre o cierra a mano en medio, se respeta hasta el siguiente
+--                 cambio del horario. Cada madrugada (4:00) se vuelve a alinear con el horario por si alguien dejó
+--                 abierto sin querer.
+alter table public.negocios
+  add column if not exists horario_auto boolean not null default false,
+  add column if not exists horario_semana jsonb,
+  add column if not exists horario_ultimo boolean;
+
+comment on column public.negocios.horario_auto is 'Si es verdadero, actualizar_horarios() abre y cierra el negocio según horario_semana.';
+comment on column public.negocios.horario_semana is 'Horario de la semana (domingo a sábado): null = cerrado, o hasta 2 rangos [["08:00","14:00"]]. Solo se guarda con guardar_horario().';
+comment on column public.negocios.horario_ultimo is 'Lo que decía el horario la última vez que se revisó (para respetar lo que el comerciante abre o cierra a mano).';
+
+-- «HH:MM» → minutos desde la medianoche (null si no es una hora válida; «24:00» vale 1440).
+create or replace function public._hhmm(p text) returns integer
+language sql immutable set search_path = public as $$
+  select case
+    when p ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' then substr(p, 1, 2)::integer * 60 + substr(p, 4, 2)::integer
+    when p = '24:00' then 1440
+  end;
+$$;
+
+-- ¿El horario de la semana tiene la forma correcta?
+create or replace function public._horario_semana_ok(p jsonb) returns boolean
+language plpgsql immutable set search_path = public as $$
+declare
+  v_dia jsonb;
+  v_rango jsonb;
+  v_a integer;
+  v_b integer;
+begin
+  if p is null then return true; end if;
+  if jsonb_typeof(p) <> 'array' or jsonb_array_length(p) <> 7 then return false; end if;
+  for v_dia in select value from jsonb_array_elements(p) loop
+    if jsonb_typeof(v_dia) = 'null' then continue; end if;
+    if jsonb_typeof(v_dia) <> 'array' or jsonb_array_length(v_dia) > 2 then return false; end if;
+    for v_rango in select value from jsonb_array_elements(v_dia) loop
+      if jsonb_typeof(v_rango) <> 'array' or jsonb_array_length(v_rango) <> 2
+         or jsonb_typeof(v_rango -> 0) <> 'string' or jsonb_typeof(v_rango -> 1) <> 'string' then
+        return false;
+      end if;
+      v_a := public._hhmm(v_rango ->> 0);
+      v_b := public._hhmm(v_rango ->> 1);
+      if v_a is null or v_b is null or v_a = v_b or v_a = 1440 then return false; end if;
+    end loop;
+  end loop;
+  return true;
+end $$;
+
+-- ¿A esta hora (hora de Oaxaca) el horario dice que está abierto? null si el horario no sirve.
+create or replace function public._horario_abierto(p_semana jsonb, p_ahora timestamptz) returns boolean
+language plpgsql stable set search_path = public as $$
+declare
+  v_local timestamp := p_ahora at time zone 'America/Mexico_City';
+  v_dia integer := extract(dow from v_local)::integer;          -- 0 = domingo … 6 = sábado
+  v_ayer integer := (extract(dow from v_local)::integer + 6) % 7;
+  v_min integer := extract(hour from v_local)::integer * 60 + extract(minute from v_local)::integer;
+  v_rango jsonb;
+  v_a integer;
+  v_b integer;
+begin
+  if p_semana is null or jsonb_typeof(p_semana) <> 'array' or jsonb_array_length(p_semana) <> 7 then return null; end if;
+
+  -- Los rangos de hoy. Si un rango termina «antes» de empezar, pasa de medianoche: hoy cuenta desde que empieza.
+  if jsonb_typeof(p_semana -> v_dia) = 'array' then
+    for v_rango in select value from jsonb_array_elements(p_semana -> v_dia) loop
+      v_a := public._hhmm(v_rango ->> 0);
+      v_b := public._hhmm(v_rango ->> 1);
+      if v_a is null or v_b is null then continue; end if;
+      if v_b > v_a then
+        if v_min >= v_a and v_min < v_b then return true; end if;
+      elsif v_min >= v_a then
+        return true;
+      end if;
+    end loop;
+  end if;
+
+  -- La parte de madrugada de los rangos de ayer que pasaron de medianoche.
+  if jsonb_typeof(p_semana -> v_ayer) = 'array' then
+    for v_rango in select value from jsonb_array_elements(p_semana -> v_ayer) loop
+      v_a := public._hhmm(v_rango ->> 0);
+      v_b := public._hhmm(v_rango ->> 1);
+      if v_a is null or v_b is null then continue; end if;
+      if v_b <= v_a and v_min < v_b then return true; end if;
+    end loop;
+  end if;
+
+  return false;
+end $$;
+
+-- Pone «abierto» según el horario en UN negocio, solo si el horario cambió desde la última revisión
+-- (o si p_forzar, que es la alineación de la madrugada). Devuelve verdadero si movió algo.
+create or replace function public._sincronizar_horario(p_negocio text, p_ahora timestamptz default now(), p_forzar boolean default false)
+returns boolean
+language plpgsql security definer set search_path = public as $$
+declare
+  r record;
+  v_nuevo boolean;
+begin
+  select id, horario_auto, horario_semana, horario_ultimo, abierto into r
+  from public.negocios where id = p_negocio for update;
+  if not found or not r.horario_auto or r.horario_semana is null then return false; end if;
+
+  v_nuevo := public._horario_abierto(r.horario_semana, p_ahora);
+  if v_nuevo is null then return false; end if;
+  if v_nuevo is not distinct from r.horario_ultimo and not (p_forzar and r.abierto is distinct from v_nuevo) then
+    return false;
+  end if;
+
+  perform set_config('mercaboot.lote', txid_current()::text, true);
+  update public.negocios set abierto = v_nuevo, horario_ultimo = v_nuevo where id = p_negocio;
+  return true;
+end $$;
+
+-- Lo ejecuta pg_cron cada minuto. Devuelve cuántos negocios abrió o cerró.
+create or replace function public.actualizar_horarios(p_ahora timestamptz default now()) returns integer
+language plpgsql security definer set search_path = public as $$
+declare
+  r record;
+  v_n integer := 0;
+  v_local timestamp := p_ahora at time zone 'America/Mexico_City';
+  v_forzar boolean := extract(hour from v_local) = 4 and extract(minute from v_local) < 5;
+begin
+  for r in select id from public.negocios where horario_auto and horario_semana is not null loop
+    if public._sincronizar_horario(r.id, p_ahora, v_forzar) then v_n := v_n + 1; end if;
+  end loop;
+  return v_n;
+end $$;
+
+-- El comerciante guarda su horario (y si quiere que sea automático). p_texto es la versión escrita del horario que ven los
+-- clientes («Lun a Sáb 8:00 a 20:00»); la arma la app. Si es automático, el negocio se abre o se cierra desde ese momento.
+create or replace function public.guardar_horario(p_auto boolean, p_semana jsonb, p_texto text default null)
+returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_negocio text;
+begin
+  if v_uid is null then raise exception 'Inicia sesión para continuar.'; end if;
+  select n.id into v_negocio from public.negocios n where n.dueno_id = v_uid;
+  if v_negocio is null then raise exception 'Primero registra tu negocio.'; end if;
+  if not public._horario_semana_ok(p_semana) then raise exception 'El horario no es válido.'; end if;
+  if coalesce(p_auto, false) and p_semana is null then
+    raise exception 'Para que el horario sea automático, primero pon tu horario.';
+  end if;
+
+  update public.negocios
+     set horario_auto = coalesce(p_auto, false),
+         horario_semana = p_semana,
+         horario_ultimo = null,
+         horario = case when p_texto is null then horario else nullif(left(btrim(p_texto), 300), '') end
+   where id = v_negocio;
+
+  if coalesce(p_auto, false) then
+    perform public._sincronizar_horario(v_negocio);
+  end if;
+end $$;
+
+-- Cada minuto, pg_cron abre y cierra los negocios que tienen horario automático. Si esta base no tiene pg_cron, no pasa
+-- nada grave: el horario se aplica en el momento en que el comerciante lo guarda, y el resto lo sigue manejando a mano.
+do $$
+begin
+  if exists (select 1 from pg_available_extensions where name = 'pg_cron') then
+    begin
+      create extension if not exists pg_cron;
+      perform cron.schedule('mercaboot-horarios', '* * * * *', 'select public.actualizar_horarios()');
+    exception when others then
+      raise notice 'pg_cron no se pudo activar (%). El horario automático solo se aplica al guardarlo.', sqlerrm;
+    end;
+  else
+    raise notice 'Esta base no tiene pg_cron: el horario automático solo se aplica al guardarlo.';
+  end if;
+end $$;
+
+-- 6) Permisos ------------------------------------------------------------------------------------------------------------
+-- Las funciones internas no las puede llamar la app; las tres de uso del comerciante, sí (y revisan quién es).
+revoke all on function public._hhmm(text), public._horario_semana_ok(jsonb), public._horario_abierto(jsonb, timestamptz),
+  public._sincronizar_horario(text, timestamptz, boolean), public.actualizar_horarios(timestamptz)
+  from public, anon, authenticated;
+
+revoke all on function public.productos_actualizar_lote(text, jsonb), public.productos_agregar_lote(text, jsonb),
+  public.guardar_horario(boolean, jsonb, text) from public, anon;
+grant execute on function public.productos_actualizar_lote(text, jsonb) to authenticated;
+grant execute on function public.productos_agregar_lote(text, jsonb) to authenticated;
+grant execute on function public.guardar_horario(boolean, jsonb, text) to authenticated;
 
 -- ───────────────────────────── 8. AVISAR A LA API ─────────────────────────────
 -- Supabase ya recarga su API solo después de cada cambio; esto lo pide de nuevo por si acaso.
