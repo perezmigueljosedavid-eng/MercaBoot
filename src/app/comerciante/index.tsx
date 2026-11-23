@@ -5,9 +5,11 @@ import type { TipoAviso } from '../../data/tipos';
 import { abiertoSegun, cuandoTexto, proximoCambio } from '../../lib/horario';
 import { useAhora } from '../../lib/usarAhora';
 import { avisosVigentes, ratingDe, textoRating, useStore, type EstadoRed } from '../../store';
+import { useAvisoRapido } from '../../ui/AvisoRapido';
 import { haceCuanto, textoPrecio } from '../../ui/bits';
 import { Boti } from '../../ui/Boti';
 import { FiestaProxima } from '../../ui/Fiestas';
+import { Icon } from '../../ui/Icon';
 import { Btn, Card, Group, Screen, SectionTitle, Toggle } from '../../ui/kit';
 import { Logo } from '../../ui/Logo';
 import { ResumenDelDia } from '../../ui/ResumenDelDia';
@@ -57,7 +59,9 @@ const RAPIDOS: { label: string; tipo: TipoAviso }[] = [
 ];
 
 export default function HomeComerciante() {
-  const { s, negocio, actualizarNegocio, setDisponible, cuenta, numFrecuentes, pedidosPendientes, chatsSinLeer, estadoRed } = useStore();
+  const { s, negocio, actualizarNegocio, cuenta, numFrecuentes, pedidosPendientes, chatsSinLeer, estadoRed } = useStore();
+  // Al marcar «agotado» o «disponible» aparece el botón «Avisar a mis clientes»
+  const { cambiar, cartel } = useAvisoRapido();
   const ahora = useAhora(30);
   if (!negocio || !cuenta) return null;
 
@@ -75,7 +79,7 @@ export default function HomeComerciante() {
   const aMano = segunHorario != null && segunHorario !== negocio.abierto;
 
   return (
-    <Screen contentStyle={{ gap: 22, paddingTop: 16, paddingHorizontal: 20, paddingBottom: 24 }}>
+    <Screen overlay={cartel} contentStyle={{ gap: 22, paddingTop: 16, paddingHorizontal: 20, paddingBottom: 24 }}>
       {/* cabecera */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <Logo uri={negocio.logoUri} nombre={negocio.nombre} size={52} r={16} />
@@ -187,6 +191,24 @@ export default function HomeComerciante() {
         </Card>
       </Pressable>
 
+      {/* que los clientes te encuentren: enlace, QR y cartel */}
+      <Pressable accessibilityRole="button" accessibilityLabel="Compartir mi negocio" onPress={() => router.push('/compartir-negocio')}>
+        <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 }}>
+          <Icon name="share" size={22} color={C.green} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <T size={15} weight={700}>
+              Comparte tu negocio
+            </T>
+            <T size={13} lh={1.35} color={C.muted}>
+              Enlace para WhatsApp y un QR para pegar en tu escaparate.
+            </T>
+          </View>
+          <T size={22} color={C.muted}>
+            ›
+          </T>
+        </Card>
+      </Pressable>
+
       {/* fiesta que se acerca */}
       <FiestaProxima giro={negocio.giro} />
 
@@ -256,7 +278,7 @@ export default function HomeComerciante() {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`${p.nombre}: ${p.disponible ? 'Disponible' : 'Agotado'}. Tocar para cambiar`}
-                    onPress={() => (p.cantidad != null && p.cantidad <= 0 && !p.disponible ? router.push({ pathname: '/producto-form', params: { id: p.id } }) : setDisponible(p.id, !p.disponible))}
+                    onPress={() => (p.cantidad != null && p.cantidad <= 0 && !p.disponible ? router.push({ pathname: '/producto-form', params: { id: p.id } }) : cambiar(p))}
                     style={{ height: 34, paddingHorizontal: 12, borderRadius: 17, backgroundColor: p.disponible ? C.greenTint : C.redTint, alignItems: 'center', justifyContent: 'center' }}
                   >
                     <T size={12} weight={700} color={p.disponible ? C.greenDark : C.red}>

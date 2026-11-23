@@ -111,9 +111,11 @@ export default function PerfilCliente() {
         <Fila texto="Mis favoritos" detalle={String(favoritos.length)} onPress={() => router.navigate('/cliente/favoritos')} />
         <Fila texto="Mis reseñas" detalle={String(resenas)} onPress={() => router.push('/mis-resenas')} />
         <Fila texto="Mi ubicación" detalle={textoUbicacion} onPress={actualizarUbicacion} />
+        <Fila texto="Escanear QR de un negocio" onPress={() => router.push('/escanear-qr')} />
         <Fila texto="Avisos al teléfono" onPress={() => router.push('/avisos-telefono')} />
         <Fila texto="Personas bloqueadas" onPress={() => router.push('/bloqueados')} />
         <Fila texto="Ayuda" onPress={() => router.push('/ayuda')} />
+        <Fila texto="Acerca de Mercaboot" onPress={() => router.push('/acerca-de')} />
       </Group>
       <Btn
         label="Cerrar sesión"

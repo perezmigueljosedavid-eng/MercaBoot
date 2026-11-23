@@ -5,6 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { nombreCategoria, textoEtiquetas } from '../../data/contenido';
 import type { CategoriaProducto } from '../../data/tipos';
 import { perfilDeProducto } from '../../ia/ingredientes';
+import { compartirNegocio } from '../../lib/compartir';
+import { olvidarDestino } from '../../lib/enlaces';
 import { abrirMapas, abrirTelefono, distanciaA, etiquetaDistancia } from '../../lib/geo';
 import { useBoti } from '../../lib/boti';
 import { useUbicacion } from '../../lib/ubicacion';
@@ -41,7 +43,7 @@ function Dato({ icono, texto }: { icono: IconName; texto: string }) {
 
 export default function Negocio() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { s, cuenta, favoritos, toggleFavorito, cambiarModo, carrito, agregarAlCarrito, ponerCantidad } = useStore();
+  const { s, cuenta, favoritos, toggleFavorito, cambiarModo, carrito, agregarAlCarrito, ponerCantidad, avisar } = useStore();
   const { decir } = useBoti();
   const insets = useSafeAreaInsets();
   const { coords } = useUbicacion();
@@ -56,6 +58,13 @@ export default function Negocio() {
   const [limite, setLimite] = useState(POR_PAGINA);
   // Lo que se está reportando (una reseña o este negocio)
   const [reportando, setReportando] = useState<ObjetoReportado | null>(null);
+
+  // Quien llegó por un enlace o QR sin tener sesión ya fue llevado hasta aquí: se deja de recordar el destino (con una pausa, porque
+  // al entrar se hacen varias redirecciones seguidas que todavía lo consultan).
+  useEffect(() => {
+    const t = setTimeout(olvidarDestino, 4000);
+    return () => clearTimeout(t);
+  }, []);
 
   // El aviso se quita solo.
   useEffect(() => {
@@ -180,10 +189,24 @@ export default function Negocio() {
     <View style={{ flex: 1 }}>
     <Screen bottomInset contentStyle={{ paddingTop: 0, paddingBottom: barra ? 100 : 24 }}>
       {/* portada */}
-      <View style={{ height: 120 + insets.top, paddingTop: insets.top + 8, paddingHorizontal: 12, backgroundColor: C.greenTint }}>
+      <View style={{ height: 120 + insets.top, paddingTop: insets.top + 8, paddingHorizontal: 12, backgroundColor: C.greenTint, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: C.white }}>
           <BackBtn />
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={esMio ? 'Compartir mi negocio: enlace y QR' : 'Compartir este negocio'}
+          onPress={() => {
+            // Al dueño se le lleva a su pantalla completa (QR y cartel); a los demás se les abre «Compartir» del teléfono
+            if (esMio) return router.push('/compartir-negocio');
+            void compartirNegocio({ id: n.id, nombre: n.nombre }).then((r) => {
+              if (r) avisar(r);
+            });
+          }}
+          style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: C.white, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Icon name="share" size={20} color={C.ink} />
+        </Pressable>
       </View>
 
       <View style={{ gap: 14, paddingHorizontal: 20 }}>

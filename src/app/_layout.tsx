@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { ScrollView, View } from 'react-native';
-import { Stack, router, useSegments } from 'expo-router';
+import { Stack, router, usePathname, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,6 +11,7 @@ import { PlusJakartaSans_600SemiBold } from '@expo-google-fonts/plus-jakarta-san
 import { PlusJakartaSans_700Bold } from '@expo-google-fonts/plus-jakarta-sans/700Bold';
 import { PlusJakartaSans_800ExtraBold } from '@expo-google-fonts/plus-jakarta-sans/800ExtraBold';
 import { BotiProvider } from '../lib/boti';
+import { recordarDestino } from '../lib/enlaces';
 import { UbicacionProvider } from '../lib/ubicacion';
 import { StoreProvider, useStore } from '../store';
 import { AlertasDeProductos } from '../ui/AlertasDeProductos';
@@ -68,12 +69,13 @@ function Aviso({ texto }: { texto: string | null }) {
 }
 
 /** Las únicas pantallas que se pueden abrir sin haber iniciado sesión (el primer tramo de su dirección). */
-const PANTALLAS_PUBLICAS = new Set(['', 'tipo-cuenta', 'registro', 'iniciar-sesion', 'recuperar', 'restablecer', 'ayuda', '+not-found']);
+const PANTALLAS_PUBLICAS = new Set(['', 'tipo-cuenta', 'registro', 'iniciar-sesion', 'recuperar', 'restablecer', 'ayuda', 'acerca-de', '+not-found']);
 
 function Raiz({ fuentesListas }: { fuentesListas: boolean }) {
   const { ready, nubeOk, estadoRed, aviso, cuenta } = useStore();
   const insets = useSafeAreaInsets();
   const segmentos: string[] = useSegments();
+  const ruta = usePathname();
   const lista = fuentesListas && ready;
 
   useEffect(() => {
@@ -84,8 +86,11 @@ function Raiz({ fuentesListas }: { fuentesListas: boolean }) {
   // Los datos ya los protege la base de datos (RLS); esto evita además que alguien vea una pantalla vacía o a medias.
   const fuera = lista && nubeOk && !cuenta && !PANTALLAS_PUBLICAS.has(segmentos[0] ?? '');
   useEffect(() => {
-    if (fuera) router.replace('/');
-  }, [fuera]);
+    if (!fuera) return;
+    // Si abrió el enlace o el QR de un negocio, se recuerda para llevarlo ahí en cuanto inicie sesión o cree su cuenta
+    recordarDestino(ruta);
+    router.replace('/');
+  }, [fuera, ruta]);
 
   if (!lista) return null;
   if (!nubeOk) return <PantallaSinNube />;

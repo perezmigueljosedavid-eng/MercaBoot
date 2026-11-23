@@ -21,3 +21,10 @@ export const SUPABASE_ANON_KEY: string = process.env.EXPO_PUBLIC_SUPABASE_ANON_K
 
 /** Falso mientras no se hayan puesto los datos reales: la app muestra una pantalla que explica qué falta. */
 export const NUBE_CONFIGURADA = !SUPABASE_URL.includes('REEMPLAZA') && !SUPABASE_ANON_KEY.includes('REEMPLAZA');
+
+/**
+ * Dirección de la versión web de Mercaboot (la que se publica en GitHub Pages). Es la que llevan los enlaces y los QR que se
+ * comparten de un negocio, para que abran en cualquier celular aunque todavía no tenga la app instalada. Si algún día hay un
+ * dominio propio, se cambia aquí y nada más (sin la diagonal final).
+ */
+export const URL_WEB = 'https://perezmigueljosedavid-eng.github.io/MercaBoot';

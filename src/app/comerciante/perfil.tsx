@@ -139,12 +139,15 @@ export default function PerfilComerciante() {
       <BotiAjustes />
 
       <Group r={18}>
+        <Fila texto="Compartir mi negocio (QR y cartel)" onPress={() => router.push('/compartir-negocio')} />
         <Fila texto="Clientes frecuentes" onPress={() => router.push('/clientes')} />
         <Fila texto="Así ven mi negocio los clientes" onPress={() => router.push(`/negocio/${negocio.id}`)} />
         <Fila texto="Reseñas de mis clientes" onPress={() => router.push(`/negocio/${negocio.id}`)} />
+        <Fila texto="Escanear QR de un negocio" onPress={() => router.push('/escanear-qr')} />
         <Fila texto="Avisos al teléfono" onPress={() => router.push('/avisos-telefono')} />
         <Fila texto="Personas bloqueadas" onPress={() => router.push('/bloqueados')} />
         <Fila texto="Ayuda" onPress={() => router.push('/ayuda')} />
+        <Fila texto="Acerca de Mercaboot" onPress={() => router.push('/acerca-de')} />
       </Group>
 
       <Btn

@@ -33,6 +33,7 @@ export function Screen({
   light = false,
   contentStyle,
   bottomInset = false,
+  overlay,
 }: {
   children: React.ReactNode;
   scroll?: boolean;
@@ -41,6 +42,8 @@ export function Screen({
   contentStyle?: StyleProp<ViewStyle>;
   /** añade el margen inferior del sistema (pantallas sin barra de pestañas) */
   bottomInset?: boolean;
+  /** algo que flota encima de la pantalla (por ejemplo, un cartelito con un botón), ya con su posición absoluta */
+  overlay?: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
   const pad = { paddingTop: insets.top, paddingBottom: bottomInset ? insets.bottom : 0 };
@@ -62,6 +65,7 @@ export function Screen({
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         {inner}
       </KeyboardAvoidingView>
+      {overlay}
     </View>
   );
 }

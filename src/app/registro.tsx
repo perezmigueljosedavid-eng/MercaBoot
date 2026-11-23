@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import type { Rol } from '../data/tipos';
+import { verDestino } from '../lib/enlaces';
 import type { AltaNegocio } from '../store';
 import { correoValido, telefonoValido, useStore } from '../store';
 import { BackBtn, Btn, Field, Screen } from '../ui/kit';
@@ -58,7 +59,8 @@ export default function Registro() {
     const err = await registrar({ nombre, correo, telefono, password, rol, negocio });
     setCargando(false);
     if (err) return setError(err);
-    router.replace(rol === 'cliente' ? '/cliente' : '/comerciante');
+    // Un cliente que llegó por el enlace o el QR de un negocio entra directo a ese negocio
+    router.replace(rol === 'cliente' ? (verDestino() ?? '/cliente') : '/comerciante');
   }
 
   return (

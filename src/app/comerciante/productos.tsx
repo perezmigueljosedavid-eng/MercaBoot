@@ -8,6 +8,7 @@ import { DESDE_CUANTOS, filtrarProductos, POR_PAGINA } from '../../lib/listaProd
 import { cantidadTexto } from '../../lib/pedidos';
 import { useStore } from '../../store';
 import { haceCuanto, textoPrecio } from '../../ui/bits';
+import { useAvisoRapido } from '../../ui/AvisoRapido';
 import { BuscadorProductos, VerMas } from '../../ui/BuscadorProductos';
 import { FotoProducto } from '../../ui/FotoProducto';
 import { Icon, IconName } from '../../ui/Icon';
@@ -42,7 +43,9 @@ function Herramienta({ icono, titulo, texto, ruta }: { icono: IconName; titulo: 
 }
 
 export default function MisProductos() {
-  const { s, negocio, setDisponible } = useStore();
+  const { s, negocio } = useStore();
+  // Al marcar «agotado» o «disponible» aparece el botón «Avisar a mis clientes»
+  const { cambiar, cartel } = useAvisoRapido();
   const [q, setQ] = useState('');
   const [categoria, setCategoria] = useState<CategoriaProducto | null>(null);
   const [filtro, setFiltro] = useState<Filtro>('todos');
@@ -65,7 +68,7 @@ export default function MisProductos() {
   };
 
   return (
-    <Screen contentStyle={{ gap: 16, paddingTop: 16, paddingHorizontal: 20, paddingBottom: 24 }}>
+    <Screen overlay={cartel} contentStyle={{ gap: 16, paddingTop: 16, paddingHorizontal: 20, paddingBottom: 24 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <View style={{ flex: 1, gap: 2 }}>
           <T size={24} weight={800} ls={-0.02}>
@@ -169,7 +172,7 @@ export default function MisProductos() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`${p.nombre}: ${p.disponible ? 'Disponible' : 'Agotado'}. Tocar para cambiar`}
-                onPress={() => (p.cantidad != null && p.cantidad <= 0 && !p.disponible ? router.push({ pathname: '/producto-form', params: { id: p.id } }) : setDisponible(p.id, !p.disponible))}
+                onPress={() => (p.cantidad != null && p.cantidad <= 0 && !p.disponible ? router.push({ pathname: '/producto-form', params: { id: p.id } }) : cambiar(p))}
                 style={{ height: 36, paddingHorizontal: 12, borderRadius: 18, backgroundColor: p.disponible ? C.greenTint : C.redTint, alignItems: 'center', justifyContent: 'center' }}
               >
                 <T size={12} weight={700} color={p.disponible ? C.greenDark : C.red}>

@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import { COMUNIDAD } from '../data/contenido';
 import { useBoti } from '../lib/boti';
+import { verDestino } from '../lib/enlaces';
 import { callarBoti, hablarBoti } from '../lib/voz';
 import { useStore } from '../store';
 import { Boti, type DisparoEmocion } from '../ui/Boti';
@@ -34,7 +35,8 @@ export default function Bienvenida() {
     };
   }, [cuenta, puedeHablar, hablar]);
 
-  if (cuenta) return <Redirect href={cuenta.rol === 'cliente' ? '/cliente' : '/comerciante'} />;
+  // Si un cliente llegó por el enlace o el QR de un negocio, lo primero que ve al entrar es ese negocio
+  if (cuenta) return <Redirect href={cuenta.rol === 'cliente' ? (verDestino() ?? '/cliente') : '/comerciante'} />;
 
   return (
     <Screen light bg={C.green} scroll={false} bottomInset contentStyle={{ paddingHorizontal: 24, paddingTop: 40, paddingBottom: 24 }}>
@@ -75,6 +77,11 @@ export default function Bienvenida() {
       <View style={{ gap: 12 }}>
         <Btn label="Crear cuenta" variant="amber" onPress={() => router.push('/tipo-cuenta')} />
         <Btn label="Ya tengo cuenta" variant="outlineWhite" onPress={() => router.push('/iniciar-sesion')} />
+        <Pressable accessibilityRole="link" onPress={() => router.push('/acerca-de')} hitSlop={10} style={{ alignSelf: 'center', paddingVertical: 4 }}>
+          <T size={13} weight={600} color={C.white} style={{ opacity: 0.85, textDecorationLine: 'underline' }}>
+            Acerca de Mercaboot y privacidad
+          </T>
+        </Pressable>
       </View>
     </Screen>
   );
