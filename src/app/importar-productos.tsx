@@ -20,6 +20,8 @@ import {
   repartirFilas,
   type LecturaCsv,
 } from '../lib/csvProductos';
+import { productosDeFotoACsv } from '../lib/fotoAProductos';
+import { leerListaDeFoto, tomarFotoDeLista, type OrigenDeFoto } from '../lib/leerFoto';
 import { porNombre } from '../lib/listaProductos';
 import { useStore, type ProductoDeLote } from '../store';
 import { textoPrecio } from '../ui/bits';
@@ -63,7 +65,8 @@ function Paso({ n, texto }: { n: number; texto: string }) {
 const plural = (n: number, uno: string, varios: string) => `${n.toLocaleString('es-MX')} ${n === 1 ? uno : varios}`;
 
 /**
- * Importar productos desde Excel o Google Sheets (archivo CSV o filas copiadas) y sacar la lista propia en el mismo formato.
+ * Importar productos desde Excel o Google Sheets (archivo CSV o filas copiadas) o desde la foto de una lista de precios (la lee una inteligencia
+ * artificial en el servidor), y sacar la lista propia en el mismo formato.
  * Antes de agregar nada se muestra un resumen: cuántos son nuevos, cuáles ya los tiene, qué filas no sirven y qué precios cambian.
  * Autor: José David Pérez Miguel
  */
@@ -76,6 +79,7 @@ export default function ImportarProductos() {
   const [actualizar, setActualizar] = useState(true);
   const [verProblemas, setVerProblemas] = useState(false);
   const [trabajando, setTrabajando] = useState(false);
+  const [leyendoFoto, setLeyendoFoto] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');
@@ -178,6 +182,31 @@ export default function ImportarProductos() {
     }
   }
 
+  /** Toma o elige la foto de la lista de precios, la manda a leer y, si salió bien, la deja como resumen para revisar (no agrega nada todavía). */
+  async function desdeFoto(origenDeLaFoto: OrigenDeFoto) {
+    if (leyendoFoto || trabajando) return;
+    setError('');
+    setAviso('');
+    let foto: string | null;
+    try {
+      foto = await tomarFotoDeLista(origenDeLaFoto);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No pudimos usar esa foto. Prueba con otra.');
+      return;
+    }
+    if (!foto) return;
+    setLeyendoFoto(true);
+    setLectura(null);
+    const r = await leerListaDeFoto(foto);
+    setLeyendoFoto(false);
+    if (!r.ok) {
+      setError(r.mensaje);
+      return;
+    }
+    empezar(productosDeFotoACsv(r.productos), 'tu foto');
+    setAviso(r.nota ? `Ojo: ${r.nota} Revisa bien antes de agregar.` : 'Revisa que los nombres y los precios estén bien antes de agregar.');
+  }
+
   /** Guarda el archivo en la memoria temporal y abre «compartir» (WhatsApp, Drive, correo…). Si no se puede, copia el texto. */
   async function entregar(csv: string, nombreArchivo: string, titulo: string) {
     setError('');
@@ -274,13 +303,13 @@ export default function ImportarProductos() {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 8, paddingBottom: 8, paddingLeft: 8, paddingRight: 16 }}>
           <BackBtn />
           <T size={18} weight={700}>
-            Importar desde Excel
+            Importar mi lista
           </T>
         </View>
 
         <View style={{ gap: 14, paddingTop: 4, paddingHorizontal: 20 }}>
           <T size={14} lh={1.5} color={C.greyText}>
-            Si ya tienes tus productos en Excel o Google Sheets, súbelos de golpe: sin escribirlos uno por uno y sin fotos. También sirve para cambiar muchos precios a la vez.
+            Si ya tienes tus productos en Excel o Google Sheets, súbelos de golpe, sin escribirlos uno por uno ni subir una foto de cada producto. También sirve para cambiar muchos precios a la vez. Y si tu lista está en papel o en un pizarrón, más abajo puedes fotografiarla.
           </T>
 
           <Card style={{ gap: 12, padding: 16 }}>
@@ -294,6 +323,33 @@ export default function ImportarProductos() {
             <Btn label={trabajando ? 'Abriendo…' : 'Elegir archivo'} h={50} r={14} size={15} flex={1} disabled={trabajando} onPress={() => void elegirArchivo()} />
             <Btn label="Pegar lo que copié" variant="outline" h={50} r={14} size={15} flex={1} onPress={() => void pegar()} />
           </View>
+
+          {/* Desde una foto (la lee una inteligencia artificial en el servidor; se revisa antes de agregar) */}
+          <Card style={{ gap: 10, padding: 16 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: C.greenTint, alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="camera" size={18} color={C.green} />
+              </View>
+              <T size={15} weight={700} lh={1.3} style={{ flex: 1 }}>
+                ¿Tu lista está en papel o en un pizarrón?
+              </T>
+            </View>
+            <T size={13} lh={1.45} color={C.muted}>
+              Tómale una foto de frente y con buena luz. Una inteligencia artificial lee los productos y los precios y te los muestra para que los revises antes de agregar nada. La foto solo se manda a leer: no se guarda. No fotografíes datos personales.
+            </T>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Btn
+                label={leyendoFoto ? 'Leyendo tu foto…' : 'Fotografiar mi lista'}
+                h={48}
+                r={14}
+                size={14}
+                flex={1}
+                disabled={leyendoFoto || trabajando}
+                onPress={() => void desdeFoto('camara')}
+              />
+              <Btn label="Elegir una foto" variant="outline" h={48} r={14} size={14} flex={1} disabled={leyendoFoto || trabajando} onPress={() => void desdeFoto('galeria')} />
+            </View>
+          </Card>
 
           {error ? (
             <T size={13.5} weight={600} lh={1.45} color={C.red} accessibilityRole="alert">

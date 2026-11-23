@@ -43,7 +43,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Mercaboot necesita tus fotos para que puedas elegir el logo de tu negocio o tu foto de perfil.",
+          "photosPermission": "Mercaboot necesita tus fotos para que puedas elegir el logo de tu negocio, tu foto de perfil o la foto de tu lista de precios.",
           "cameraPermission": false,
           "microphonePermission": false
         }
@@ -76,7 +76,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Mercaboot usa la cámara solo cuando tú la abres para leer el código de barras de un producto. No se guardan fotos ni video.",
+          "cameraPermission": "Mercaboot usa la cámara solo cuando tú la abres: para leer un código de barras o un QR, o para fotografiar tu lista de precios. Mercaboot no guarda fotos ni video.",
           "microphonePermission": false,
           "recordAudioAndroid": false
         }

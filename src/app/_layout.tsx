@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { ScrollView, View } from 'react-native';
-import { Stack, router, usePathname, useSegments } from 'expo-router';
+import { Stack, router, usePathname, useSegments, type ErrorBoundaryProps } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,10 +18,16 @@ import { AlertasDeProductos } from '../ui/AlertasDeProductos';
 import { AvisosAlTelefono } from '../ui/AvisosAlTelefono';
 import { Boti } from '../ui/Boti';
 import { BotiCompania } from '../ui/BotiCompania';
+import { PantallaDeError } from '../ui/PantallaDeError';
 import { T } from '../ui/T';
 import { C } from '../ui/theme';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
+
+/** Si cualquier pantalla se rompe por un error inesperado, en vez de quedar en blanco sale un mensaje con «Intentar de nuevo». */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  return <PantallaDeError error={error} retry={retry} />;
+}
 
 /** Solo la ve quien arma la app: significa que falta pegar los datos de la base de datos en src/config.ts. */
 function PantallaSinNube() {
