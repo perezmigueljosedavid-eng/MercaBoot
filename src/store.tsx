@@ -63,6 +63,7 @@ import { avisarAlOtro, quitarDispositivoDeEstaCuenta } from './lib/avisosTelefon
 import { avisarDeProductos } from './lib/avisosDeProductos';
 import { olvidarBusquedas } from './lib/busquedas';
 import { olvidarCodigos } from './lib/catalogoDeCodigos';
+import { ELIMINAR_NO_DISPONIBLE, PALABRA_DE_CONFIRMACION, confirmacionValida } from './lib/eliminarCuenta';
 import { guardarFoto, quitarFoto, vaciarFotos } from './lib/fotos';
 import { sinHorario, semanaValida, textoHorario } from './lib/horario';
 import { MAX_LINK } from './lib/pagos';
@@ -568,6 +569,11 @@ interface Ctx {
   abrirNegocio: (alta: AltaNegocio) => Promise<string | null>;
   /** La cuenta deja de administrar su negocio y sigue como cliente. */
   soltarNegocio: () => Promise<string | null>;
+  /**
+   * Borra para siempre la cuenta en sesión y todo lo suyo (la persona tiene que escribir ELIMINAR). Devuelve null si se borró
+   * (la sesión de este teléfono ya quedó cerrada) o el motivo en español si no se pudo.
+   */
+  eliminarCuenta: (confirmacion: string) => Promise<string | null>;
   /** Manda al correo un enlace para escribir una contraseña nueva. */
   recuperarPassword: (correo: string) => Promise<string | null>;
   /** Con el enlace del correo: pone la contraseña nueva. */
@@ -1415,6 +1421,27 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return null;
   }, [fijarModo, refrescar]);
 
+  const eliminarCuenta = useCallback<Ctx['eliminarCuenta']>(async (confirmacion) => {
+    const quien = uidRef.current;
+    if (!quien) return 'No hay una sesión activa.';
+    if (!confirmacionValida(confirmacion)) return `Escribe ${PALABRA_DE_CONFIRMACION} (en mayúsculas) para confirmar.`;
+    const { data, error } = await supabase.rpc('borrar_mi_cuenta', { p_confirmacion: confirmacion.trim() });
+    if (error) return faltaEnLaBase(error) ? ELIMINAR_NO_DISPONIBLE : textoError(error);
+    if (data) return data as string;
+    // La cuenta ya no existe en la nube. Aquí se borra lo que este teléfono guardaba de ella y se cierra su sesión
+    // (sin avisarle al servidor: ya no hay a quién avisar).
+    await Promise.all(
+      [claveModo(quien), claveCache(quien), claveCacheVieja(quien), claveCarrito(quien)].map((k) => AsyncStorage.removeItem(k).catch(() => {})),
+    );
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch {
+      /* aunque falle, la cuenta ya no existe: la sesión del teléfono deja de servir */
+    }
+    uidRef.current = null;
+    return null;
+  }, []);
+
   const recuperarPassword = useCallback<Ctx['recuperarPassword']>(async (correoIn) => {
     const correo = correoIn.trim().toLowerCase();
     if (!correoValido(correo)) return 'Escribe un correo válido.';
@@ -2203,6 +2230,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       comprobarReclamo,
       abrirNegocio,
       soltarNegocio,
+      eliminarCuenta,
       recuperarPassword,
       restablecerPassword,
       actualizarCuenta,
@@ -2246,7 +2274,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }),
     [
       ready, datos, cuenta, negocio, favoritos, numFrecuentes, pedidosPendientes, estadoRed, aviso, avisar, chatsSinLeer, refrescar, negociosLibres, registrar,
-      entrar, salir, cambiarModo, comprobarReclamo, abrirNegocio, soltarNegocio, recuperarPassword, restablecerPassword, actualizarCuenta,
+      entrar, salir, cambiarModo, comprobarReclamo, abrirNegocio, soltarNegocio, eliminarCuenta, recuperarPassword, restablecerPassword, actualizarCuenta,
       cambiarPassword, actualizarNegocio, toggleFavorito, agregarProducto, editarProducto, eliminarProducto, setDisponible, actualizarProductosLote, agregarProductosLote, guardarHorario, publicarAviso, quitarAviso, agregarResena, borrarResena, mensajesDe,
       observarChat, enviarComoCliente, enviarComoNegocio, marcarLeida, carrito, agregarAlCarrito, ponerCantidad, quitarDelCarrito, vaciarCarrito,
       crearPedido, accionPedido, lineasDe, datosPagoDe, leerDatosPago, guardarDatosPago, linkPagoDe, leerLinkPago, guardarLinkPago, ponerLinkPedido, miLinkPedido, marcarFrecuente, quitarFrecuente,

@@ -94,6 +94,7 @@ export default function AcercaDe() {
         <Punto>Las ideas y recetas con inteligencia artificial (cuando están activadas) mandan el texto que escribes a un proveedor de IA para armar la respuesta. Y si un comerciante importa su lista desde una foto, esa foto también se manda para leerla y no se guarda. No escribas ni fotografíes datos personales.</Punto>
         <Punto>Mercaboot no cobra ni guarda tarjetas, y no mueve dinero: cada pago va directo al negocio. Los datos de transferencia y los links de pago son privados y solo llegan al cliente de un pedido aceptado.</Punto>
         <Punto>No vendemos tus datos ni mostramos anuncios.</Punto>
+        <Punto>Puedes eliminar tu cuenta cuando quieras desde tu perfil («Eliminar mi cuenta»). Se borra lo tuyo y, si tienes un negocio, también el negocio. Solo puede quedarse, sin tu nombre, un reporte sobre algo que escribiste y un registro de seguridad que dice qué pasó y cuándo.</Punto>
       </Seccion>
 
       <Seccion titulo="Reglas de la comunidad">

@@ -167,6 +167,12 @@ export default function PerfilComerciante() {
         </T>
       </Pressable>
 
+      <Pressable accessibilityRole="button" onPress={() => router.push('/eliminar-cuenta')} style={{ alignSelf: 'center', paddingVertical: 8 }} hitSlop={8}>
+        <T size={13} weight={600} color={C.muted} style={{ textDecorationLine: 'underline' }}>
+          Eliminar mi cuenta
+        </T>
+      </Pressable>
+
       <Confirmar
         visible={confirmando}
         titulo={delDirectorio ? `¿Dejar de administrar «${negocio.nombre}»?` : '¿Dejar de ser comerciante?'}
