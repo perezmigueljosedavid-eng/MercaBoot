@@ -1,17 +1,19 @@
-# Mercaboot · Versión final 4.0
+# Mercaboot · Versión 2 («Mercaboot 2»)
 
 App para saber **qué hay hoy en las tiendas de tu comunidad** (San Francisco Javier, Santa Cruz Xoxocotlán, Oaxaca).
 Está hecha con Expo / React Native: **el mismo código** funciona en Android, en iPhone y en el navegador.
 
-**Versión 4.0.0 · entrega final** de la materia de Inteligencia Artificial (UABJO). Reúne en una sola app todo lo de los avances anteriores
-(Avance 1, Avance 2, Avance 2.1 y la versión 3.1.1 con el asistente, las reseñas y los avisos) y corrige lo que fallaba.
+**Versión 5.0.0 · versión 2.** Parte de la versión final 4.0 de la materia de Inteligencia Artificial (UABJO, que sigue intacta en la rama `version-final`) y agrega lo que se pidió
+después de la exposición: tiendas con muchísimos productos, pagos, un Boti con más funciones, avisos al teléfono y mejores «Ideas para cocinar».
+Qué se hizo con cada punto, qué quedó pendiente y por qué: [`docs/HOJA-DE-RUTA-VERSION-2.md`](docs/HOJA-DE-RUTA-VERSION-2.md).
+Para activar lo que depende de tus cuentas (IA, avisos al teléfono) y actualizar la base de datos: [`docs/GUIA-DE-ACTIVACION.md`](docs/GUIA-DE-ACTIVACION.md).
 
 ## Cómo instalarla en tu celular
 
 | Teléfono | Qué se instala | Dónde se consigue |
 | --- | --- | --- |
-| **Android** | El **APK** (app real instalable) | [Releases → «Mercaboot · Versión final 4.0 (Android)»](https://github.com/perezmigueljosedavid-eng/MercaBoot/releases/tag/final-apk) |
-| **iPhone** | La **app web** (se instala desde Safari y queda como una app más en la pantalla de inicio) | <https://perezmigueljosedavid-eng.github.io/MercaBoot/> |
+| **Android** | El **APK** (app real instalable) | [Releases → «Mercaboot 2 · Versión 2 (Android)»](https://github.com/perezmigueljosedavid-eng/MercaBoot/releases/tag/v2-apk) |
+| **iPhone** | La **app web** (se instala desde Safari y queda como una app más en la pantalla de inicio) | <https://perezmigueljosedavid-eng.github.io/MercaBoot/> (hoy es la de la versión 4.3; la web de la versión 2 todavía no se publica) |
 
 > **¿Por qué en iPhone no hay un archivo como el APK?** Apple solo permite instalar apps «de fuera de la App Store» con una cuenta de desarrollador de pago
 > (99 dólares al año). Por eso, para el iPhone la app se entrega como **app web instalable (PWA)**: es el mismo código, se ve y funciona igual
@@ -19,10 +21,11 @@ Está hecha con Expo / React Native: **el mismo código** funciona en Android, e
 
 ### Android (APK)
 
-1. Desde el **celular**, abre el enlace de Releases de la tabla de arriba y toca **`Mercaboot-final.apk`** (se descarga).
+1. Desde el **celular**, abre el enlace de Releases de la tabla de arriba y toca **`Mercaboot-v2.apk`** (se descarga).
 2. Abre el archivo descargado. Si Android avisa que bloquea la instalación, toca **Configuración** y activa **Permitir desde esta fuente**.
 3. Toca **Instalar** y luego **Abrir**. Si aparece «Play Protect», toca **Instalar de todos modos** (es normal: la app no viene de Play Store).
-4. Necesita **internet** (Wi-Fi o datos). Si ya tenías un avance instalado, este se instala encima; si Android no lo permite, desinstala el anterior primero (tus datos están en la nube, no se pierden).
+4. Necesita **internet** (Wi-Fi o datos). «Mercaboot 2» se instala **como otra app** y **no reemplaza** a la versión final ni a «Mercaboot Voz»; usa la misma base de datos y las mismas cuentas, así que no pierdes nada.
+5. La primera vez que abras el escáner de códigos, el lector de QR o «Desde una foto», Android pide permiso para la **cámara**: toca **Mientras se usa la app**.
 
 ### iPhone (app web)
 
@@ -33,6 +36,19 @@ Está hecha con Expo / React Native: **el mismo código** funciona en Android, e
 5. Cuando la app pida la **ubicación**, toca **Permitir** (sirve para ver qué tan cerca está cada tienda).
 
 > Lo mismo sirve en Android sin instalar el APK: en Chrome, menú ⋮ → **Instalar app** / **Añadir a pantalla de inicio**.
+
+## Novedades de la versión 2
+
+Todo lo de abajo («Qué incluye») sigue igual; esto es lo nuevo. Las funciones marcadas con 🔑 están listas pero **duermen** hasta que pones una llave o una cuenta (ver la guía de activación).
+
+- **Tiendas con muchos productos** (**Productos**): *Catálogo Mercaboot* (321 productos sin foto, con su dibujito: palomeas y aparecen de golpe), *Precios de hoy* (solo pones el precio), *Importar mi lista* desde Excel o Google Sheets (CSV, con resumen antes de agregar) o *Desde una foto* de tu lista de precios 🔑, *Escanear código* de barras (con Open Food Facts), *Horario* que abre y cierra el negocio solo, y lista con buscador. Tope de 1,500 productos por negocio.
+- **Compartir tu negocio** (**Perfil**): enlace, código QR y cartel para imprimir; los clientes lo abren con *Escanear QR de un negocio*.
+- **Avisos con un toque**: «ya hay…» o «se acabó» sin escribir.
+- **Pagos**: efectivo, transferencia (CLABE y monto para copiar) o **tarjeta con el link de pago del propio negocio** (Mercado Pago, Stripe…). Mercaboot **no cobra ni mueve dinero**. Detalle en [`docs/PAGOS.md`](docs/PAGOS.md).
+- **Boti con más funciones** («¿Qué se te antoja?» → *Pregúntale a Boti*): «mi mandado: huevo, tortillas, leche» (dónde conviene comprar cada cosa), «¿qué tiendas están abiertas?», «avísame cuando haya aguacate» y un resumen del día.
+- **Ideas para cocinar**: 177 recetas propias (antes 95) y mucho mejor entendimiento de lo que escribes; para un platillo que no esté, puede armar la receta con **IA** (Claude Haiku 5.5) 🔑 con la etiqueta «Receta sugerida por IA».
+- **Avisos al teléfono** 🔑 (con la app cerrada): mensajes, pedidos, avisos de tus tiendas favoritas y «ya hay…»; se activan al conectar Firebase.
+- **Reportar y bloquear** a personas, mensajes y reseñas ([`docs/MODERACION.md`](docs/MODERACION.md)); **Eliminar mi cuenta**; pantalla de error con «Intentar de nuevo»; **Acerca de** (autoría, privacidad y créditos) y **Ayuda** completa.
 
 ## Qué incluye
 
@@ -60,7 +76,7 @@ Está hecha con Expo / React Native: **el mismo código** funciona en Android, e
 - **Pedidos**: en qué va cada pedido (esperando respuesta, apartado con su cuenta regresiva, «va en camino», entregado), datos de transferencia, «Ya pagué», cancelar e historial.
 - **Chats** con los negocios, con un número rojo cuando hay mensajes sin leer.
 - **Favoritos** (privado) con el último aviso de cada tienda, y **«Tu trato especial»** con los negocios donde el comerciante te nombró **cliente frecuente**.
-- **Ideas para cocinar**: el asistente propone recetas con lo que **hay hoy** en las tiendas de tu comunidad y dice **dónde conseguirlo**; entiende cosas como «algo con pollo» o «algo dulce». Funciona **sin internet** (usa reglas propias, no una IA externa).
+- **Ideas para cocinar**: el asistente propone recetas con lo que **hay hoy** en las tiendas de tu comunidad y dice **dónde conseguirlo**; entiende cosas como «algo con pollo», «algo dulce» o un platillo concreto («pollo en salsa verde»). Sus 177 recetas y sus reglas propias funcionan **sin internet**; solo para un platillo que no esté entre ellas puede pedir la receta a una IA (opcional, ver la guía de activación).
 - **Perfil**: mis datos, **Mis reseñas**, **Mi ubicación**, ayuda y cerrar sesión.
 
 **Interfaz de comerciante** (6 pestañas: Inicio · Productos · Pedidos · Avisos · Chats · Perfil)
@@ -96,6 +112,7 @@ Estos pasos sirven para repetirlo con **otro** proyecto. Se hace una sola vez y 
    *Si ya tenías instalado el Avance 2.1*, basta con ejecutar [`supabase/actualizacion-final.sql`](supabase/actualizacion-final.sql) (agrega reseñas, avisos y los datos nuevos de los productos sin borrar nada).
    *Si ya tenías instalada la versión final*, ejecuta [`supabase/actualizacion-seguridad.sql`](supabase/actualizacion-seguridad.sql) (límites de uso, registro de seguridad y validaciones extra; no borra nada).
    *Después de la revisión de seguridad se agregó el detalle de producto*: si tu base es anterior a eso, ejecuta también [`supabase/actualizacion-detalle-productos.sql`](supabase/actualizacion-detalle-productos.sql) (foto, descripción, características y venta en medios; no borra nada).
+   *Para la versión 2*: ejecuta, en este orden, [`supabase/actualizacion-receta-ia.sql`](supabase/actualizacion-receta-ia.sql), [`supabase/actualizacion-v2-productos.sql`](supabase/actualizacion-v2-productos.sql) y [`supabase/actualizacion-v2-todo.sql`](supabase/actualizacion-v2-todo.sql). El último junta, en **un solo archivo**, todo lo demás que agrega la versión 2 (reportar y bloquear, códigos de barras, lo que busca la gente, avisos al teléfono, pagos con link y eliminar mi cuenta); solo **agrega** cosas (no borra ni renombra nada) y se puede correr varias veces. Las funciones del servidor (`supabase/functions/`: `receta-ia`, `foto-a-productos` y `enviar-notificacion`) se publican como dice la guía de activación.
    *Opcional*: activa la extensión **pg_cron** (Integrations → Cron) para que los pedidos vencidos y los avisos caducados se limpien cada minuto aunque nadie tenga la app abierta.
 3. **Authentication → Sign In / Providers → Email**: **apaga «Confirm email»** y guarda (si no, cada cuenta nueva tendría que confirmarse desde un correo).
 4. *(Opcional, para «¿Olvidaste tu contraseña?»)* **Authentication → URL Configuration → Redirect URLs** → agrega `mercaboot://**` y la dirección de la app web.
@@ -106,8 +123,9 @@ Estos pasos sirven para repetirlo con **otro** proyecto. Se hace una sola vez y 
 
 Se hace «en la nube» de GitHub (no hace falta Android Studio ni una Mac). Sube **todos** los archivos a un repositorio (incluida la carpeta oculta `.github`).
 
-- **APK de Android**: se arma **solo** cada vez que se sube un cambio al archivo `disparador-apk.txt` (pestaña **Actions → Construir APK** para ver cómo va). Tarda unos 15 minutos. Queda en **Releases** como `Mercaboot-final.apk` (etiqueta `final-apk`). Los de los avances anteriores siguen en sus propias etiquetas (`avance2-apk`, `avance2-1-apk`).
-  **Para volver a armarlo**: en GitHub abre `disparador-apk.txt` (en la rama `version-final`), toca el lápiz ✏️, cambia el número de la compilación y presiona **Commit changes**. (El botón «Run workflow» solo aparece si el archivo del flujo está en la rama principal del repositorio; por eso se usa este archivo.)
+- **APK de Android**: se arma **solo** cada vez que se sube un cambio al archivo `disparador-apk.txt` (pestaña **Actions → Construir APK** para ver cómo va). Tarda unos 15 minutos. Queda en **Releases** como `Mercaboot-v2.apk` (etiqueta `v2-apk`). Los de las otras versiones siguen en sus propias etiquetas (`final-apk`, `voz-apk`, `avance2-apk`, `avance2-1-apk`).
+  Antes de publicar, la compilación revisa los tipos, los datos de conexión (sin llaves secretas), el archivo de Firebase (si lo hay) y **los permisos de Android** (cámara, internet, ubicación y avisos, tanto en el proyecto como en el APK ya armado): si algo falta, se detiene y no publica nada.
+  **Para volver a armarlo**: en GitHub abre `disparador-apk.txt` (en la rama `version-2`), toca el lápiz ✏️, cambia el número de la compilación y presiona **Commit changes**. (El botón «Run workflow» solo aparece si el archivo del flujo está en la rama principal del repositorio; por eso se usa este archivo.)
 - **App web (iPhone, Android y computadora)**: se arma **sola** al subir un cambio a `disparador-web.txt` (se vuelve a armar igual que el APK: editar ese archivo y hacer *Commit*). Tarda unos 3 minutos y publica la página en la rama `gh-pages`.
   **Una sola vez**, para que GitHub la muestre: **Settings → Pages → Build and deployment → Source: «Deploy from a branch» → Branch: `gh-pages`, carpeta `/ (root)` → Save**. A los 1–2 minutos la página queda en `https://<usuario>.github.io/<repositorio>/`.
 - Antes de compilar, el flujo revisa `src/config.ts`: si todavía tiene `REEMPLAZA-ESTO`, arma una versión **de prueba sin base de datos** que no se publica; si encuentra una llave secreta, se detiene.
@@ -128,6 +146,7 @@ Un teléfono es el **comerciante (A)** y otro el **cliente (B)**. Si solo tienes
 9. **Ideas para cocinar**: **en B**, en **Inicio** escribe «algo con pollo» o «algo dulce» y toca **Pedir ideas**: propone recetas y en qué tienda conseguirlas.
 10. **Cliente frecuente**: **en A**, desde un pedido toca **Nombrar cliente frecuente** y elige descuento y/o beneficio. **En B** aparece «⭐ Eres cliente frecuente».
 11. **Sin internet**: apaga el internet en B. Aparece el aviso «Sin internet…» y se ve lo último guardado; al volver, la app se pone al día sola.
+12. **Lo nuevo de la versión 2** (QR, catálogo, importar, escáner, pagos, reportes, avisos al teléfono…): la lista completa, paso por paso y con lo que debe pasar, está en la [guía de activación, sección 6](docs/GUIA-DE-ACTIVACION.md).
 
 ## Probarla en tu computadora
 
@@ -171,7 +190,7 @@ Toda la protección importante vive **en la base de datos**, no en la app. Así 
 
 | Pregunta | Respuesta |
 | --- | --- |
-| ¿Cada tabla tiene reglas de acceso (RLS)? | Sí, las 16. Sin sesión no se puede leer ni escribir ninguna; con sesión, cada quien ve solo lo suyo (perfil, chats, pedidos, favoritos). |
+| ¿Cada tabla tiene reglas de acceso (RLS)? | Sí, todas (las 16 originales y las que agrega la versión 2). Sin sesión no se puede leer ni escribir ninguna; con sesión, cada quien ve solo lo suyo (perfil, chats, pedidos, favoritos). |
 | ¿Hay llaves secretas en la app o en GitHub? | No. En `src/config.ts` solo va la llave **pública** (`anon`), que está hecha para ir dentro de la app. `scripts/revisar-config.cjs` detiene el armado del APK si alguien pega una llave secreta. |
 | ¿Hay archivos `.env` subidos? | No, y `.gitignore` los bloquea. El proyecto no necesita ninguno. |
 | ¿Hay límite de peticiones? | Sí, por cuenta: 30 mensajes por minuto, 60 productos nuevos cada 10 minutos, 30 pedidos por hora, etc. (sección K de `supabase/esquema.sql`). Al pasarse, la app dice «Vas muy rápido…». El inicio de sesión y el registro los limita Supabase por dirección IP. |
@@ -209,6 +228,10 @@ Eventos que anota: `cuenta_creada`, `cuenta_eliminada`, `negocio_creado`, `negoc
 | Carrito, pedidos y clientes frecuentes | `src/app/carrito.tsx`, `src/app/pedido/[id].tsx`, `src/app/clientes.tsx`, `src/lib/pedidos.ts` (las reglas de verdad las aplica la base: `crear_pedido` y `pedido_accion` en `supabase/esquema.sql`) |
 | Reseñas y avisos | `src/app/resena/[id].tsx`, `src/app/mis-resenas.tsx`, `src/app/comerciante/avisos.tsx`, `src/app/novedades.tsx` |
 | El asistente «Ideas para cocinar» (recetas y reglas) | `src/ia/` (recetas en `recetas*.ts`, el motor en `motor.ts`) y `src/app/ideas-ia.tsx` |
+| Lo nuevo de la base de datos de la versión 2 | `supabase/actualizacion-v2-*.sql` (cada parte) y `node scripts/armar-sql-v2.cjs` para rearmar `actualizacion-v2-todo.sql` (nunca se edita a mano) |
+| Funciones del servidor (IA de recetas, foto de la lista, avisos al teléfono) | `supabase/functions/` (se publican en Supabase; las llaves van como secretos de Supabase, nunca en el código) |
+| Productos en lote, importar, escáner y horario | `src/app/comerciante/`, `src/lib/csvProductos.ts`, `src/lib/codigoBarras.ts`, `src/lib/horario.ts`, `src/lib/listaProductos.ts` |
+| Pagos y avisos al teléfono | `src/lib/pagos.ts` y `docs/PAGOS.md`; `src/lib/avisosTelefono.ts` |
 | Chat | `src/ui/ChatView.tsx`, `src/app/chat-negocio/`, `src/app/chat-cliente/` |
 | Ubicación y distancias | `src/lib/ubicacion.tsx`, `src/lib/geo.ts`, `src/lib/distancia.ts` |
 | Pantallas del cliente / del comerciante | `src/app/cliente/` y `src/app/comerciante/` |
@@ -220,6 +243,8 @@ Eventos que anota: `cuenta_creada`, `cuenta_eliminada`, `negocio_creado`, `negoc
 - **Crear la cuenta se queda esperando o pide confirmar el correo**: sigue encendido «Confirm email» (Paso 1, punto 3).
 - **«Invalid API key»** o no carga nada: la llave se copió incompleta o es de otro proyecto.
 - **Los cambios no llegan al instante**: confirma que `supabase/esquema.sql` se ejecutó completo. Aun así, la app se actualiza sola cada pocos segundos como respaldo.
+- **Una función nueva dice «todavía no está disponible»**: falta ejecutar `supabase/actualizacion-v2-todo.sql` (Paso 1).
+- **La cámara no abre o dice que no tiene permiso**: Ajustes del teléfono → Apps → Mercaboot 2 → Permisos → Cámara → permitir.
 - **El proyecto de Supabase «está pausado»**: el plan gratis pausa los proyectos que pasan 7 días sin usarse. Entra a supabase.com, abre el proyecto y toca **Restore project** (conviene hacerlo antes de una demostración).
 - **La página para iPhone da «404»**: falta prender GitHub Pages (Paso 2: **Settings → Pages → Branch: `gh-pages`**) o aún no termina de publicarse (espera 1–2 minutos).
 - **En el iPhone la app instalada pide iniciar sesión otra vez**: es normal la primera vez; la sesión de Safari y la de la app instalada son independientes.
@@ -227,9 +252,9 @@ Eventos que anota: `cuenta_creada`, `cuenta_eliminada`, `negocio_creado`, `negoc
 ## Lo que todavía hay que saber
 
 - **iPhone = app web, no un archivo `.ipa`**: un `.ipa` solo se puede instalar con una cuenta de desarrollador de Apple de pago. La app web es el mismo código y se instala sin cuenta.
-- **El asistente «Ideas para cocinar» usa reglas propias** (funciona sin internet y sin llaves). **No usa Gemini**: conectar una IA externa necesita una llave de API propia del equipo, que **no** debe ir dentro de la app (se haría con una función en Supabase).
-- **Los avisos de pedidos funcionan con la app abierta** (aviso dentro de la app y número rojo). Con la app cerrada no suena nada: eso necesita notificaciones «push» (Firebase) y queda como mejora futura.
-- **El pago con tarjeta en línea no está** («próximamente»): hoy se paga en persona o por transferencia (el comerciante confirma que le llegó).
+- **El asistente «Ideas para cocinar» funciona con reglas y recetas propias** (sin internet y sin llaves). La IA para los platillos que no estén es **opcional** y viene **dormida**: se activa poniendo la llave de la API como **secreto de Supabase** (`ANTHROPIC_API_KEY`); esa llave **jamás** va dentro de la app ni en GitHub. Cuesta una fracción de centavo por receta y tiene límites de uso. Pasos en la guía de activación.
+- **Los avisos con la app abierta** (aviso dentro de la app y número rojo) funcionan siempre. **Con la app cerrada** (notificaciones «push») ya están programados, pero necesitan una cuenta de Firebase del equipo: se activan siguiendo la guía. En iPhone no hay avisos al teléfono (Apple pide una cuenta de pago).
+- **Pago con tarjeta**: Mercaboot **no cobra ni mueve dinero**. El comerciante puede poner el **link de pago de su propio proveedor** (Mercado Pago, Stripe…) y el cliente paga ahí; también se paga en persona o por transferencia (el comerciante confirma que le llegó). Las comisiones son del proveedor y pesan en compras chicas (ver [`docs/PAGOS.md`](docs/PAGOS.md)).
 - **Se necesita internet** para publicar, chatear e iniciar sesión. Sin internet la app muestra lo último guardado, pero no deja cambiar nada.
 - Las cuentas del Avance 1 estaban guardadas solo en cada teléfono: **no pasan a la nube**; hay que crearlas de nuevo.
 - Quien administra el proyecto de Supabase puede ver las tablas, incluidos los chats. Entre usuarios, un chat solo lo ven las dos personas que participan.
@@ -239,8 +264,12 @@ Eventos que anota: `cuenta_creada`, `cuenta_eliminada`, `negocio_creado`, `negoc
 
 ## Revisiones antes de entregar
 
+GitHub corre las primeras cuatro solas en cada subida de código (`.github/workflows/verificar.yml`) y la de permisos cada vez que arma el APK; todas se pueden correr también a mano:
+
 ```
 npx tsc --noEmit                  # revisa tipos
 npx expo lint                     # revisa estilo
 node scripts/revisar-config.cjs   # ¿src/config.ts está listo y sin llaves secretas?
+node scripts/armar-sql-v2.cjs --revisar   # ¿el SQL único de la versión 2 está al día y solo agrega cosas?
+node scripts/revisar-permisos.cjs android/app/src/main/AndroidManifest.xml   # (después de «npx expo prebuild») ¿no falta la cámara?
 ```

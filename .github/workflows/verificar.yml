@@ -1,0 +1,55 @@
+name: Verificar el código
+
+# Revisa el código de «Mercaboot 2» cada vez que se sube un cambio a la rama version-2 (y en los pull requests):
+#   · tipos (TypeScript) y estilo (lint);
+#   · que src/config.ts no tenga una llave secreta;
+#   · que supabase/actualizacion-v2-todo.sql esté al día con sus partes y solo agregue cosas (sin DROP ni TRUNCATE).
+# No arma el APK (eso lo hace «Construir APK»). Si algo sale mal, la subida muestra una ✗ roja en GitHub y la pestaña Actions dice qué fue.
+# Los cambios que solo tocan documentos (carpeta docs, archivos .md) no lo corren, porque no hay nada que revisar.
+on:
+  push:
+    branches: [version-2]
+    paths-ignore: ['docs/**', '*.md', 'disparador-*.txt']
+  pull_request:
+    branches: [version-2]
+    paths-ignore: ['docs/**', '*.md', 'disparador-*.txt']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verificar-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: '1'
+      EXPO_NO_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Instalar dependencias
+        run: npm install --no-audit --no-fund
+
+      - name: Revisar tipos (TypeScript)
+        run: npx tsc --noEmit
+
+      - name: Revisar estilo (lint)
+        run: npx expo lint
+
+      - name: Revisar la conexión con la base de datos (sin llaves secretas)
+        run: node scripts/revisar-config.cjs
+
+      - name: Revisar la actualización de la base de datos (al día y solo aditiva)
+        run: node scripts/armar-sql-v2.cjs --revisar

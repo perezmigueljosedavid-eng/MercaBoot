@@ -6,7 +6,7 @@
 | **Autor principal** | José David Pérez Miguel |
 | **Segunda autora** | Izebel Altamirano Carreño |
 | **Fecha** | 21 de noviembre de 2026 |
-| **Estado** | Diagnóstico terminado. El plan está por aprobar; todavía no se cambió el código. |
+| **Estado** | **Resuelto en la versión 2** (23 de noviembre de 2026): ver la sección 8. Lo demás es el diagnóstico original del 21 de noviembre, tal como se escribió. |
 
 © 2026 José David Pérez Miguel. Todos los derechos reservados (ver [LICENSE](../LICENSE)).
 
@@ -82,9 +82,25 @@ Lo más importante:
 - Los platillos que ya existen en el recetario salen siempre cuando se escriben por su nombre.
 - El recetario llega a unas 300 recetas con ingredientes ligados al catálogo.
 
+## 8. Resultado en la versión 2 (23 de noviembre de 2026)
+
+Se repitió la misma prueba, con las mismas 41 frases y el mismo catálogo de prueba, sobre el código final de la versión 2:
+
+| Tipo de frase | Frases | Receta correcta | Receta parecida | Nada útil o equivocado |
+|---|---|---|---|---|
+| Nombres de platillos | 37 | **37** (antes 2) | 0 (antes 5) | 0 (antes 30) |
+| Pedidos por ingrediente o antojo | 4 | 3 y 1 con cambio a propósito | 0 | 0 |
+
+- **Los platillos.** Las 37 frases dan ahora su receta: «pollo en salsa verde», «pollo en salsa roja» (ya no se confunden), «galletas», «pastel», «mole», «tamales», «lasaña», «pizza», «pay de limón», «agua de limón», «ceviche», «brownies»… Ninguna muestra recetas sin relación y ya no aparece «No estoy seguro de haberte entendido» en frases de comida.
+- **Una frase cambió a propósito.** «qué cocino con pollo y papa» antes proponía recetas sin papa. Como en el catálogo de prueba ninguna tienda vende papa, ahora dice con honestidad que no hay una receta que se pueda armar con lo publicado hoy y ofrece buscar con «tengo pollo y papa», que da «Pollo al horno con papas». Las otras tres («algo dulce», «tengo huevo y jitomate» y «dónde hay huevo») siguen bien.
+- **Capa 1, entender mejor: hecha.** Primero se busca el platillo y después el producto, con sinónimos, variantes y palabras que se contradicen («verde» y «roja»). Si no hay receta confiable, lo dice.
+- **Capa 2, recetario grande: hecha en parte.** Pasó de 95 a **177 recetas** (56 escritas a mano y 26 combinaciones «carne + salsa»). La meta de unas 300 **no se alcanzó**; lo que falte lo cubre la capa 3 y se amplía a mano con lo que la gente pida.
+- **Capa 3, IA para lo que no esté: hecha y dormida.** La función `receta-ia` ya está publicada en Supabase, con límites de uso y caché, pero **no responde hasta que se ponga la llave** `ANTHROPIC_API_KEY` (pasos en la [guía de activación](GUIA-DE-ACTIVACION.md)). Mientras tanto, la app dice amablemente que todavía no tiene esa receta.
+- **Cómo se sabrá que quedó bien (sección 7):** ninguna frase muestra recetas sin relación ✓ · los platillos del recetario salen siempre por su nombre ✓ · recetario de unas 300 recetas ✗ (177). La lista de 60 frases propuesta quedó en las 41 de esta prueba.
+
 ## Anexo · Las 41 frases de la prueba
 
-Resultado: ✓ receta correcta · ≈ receta parecida · ✗ nada útil o equivocado.
+Resultado **del 21 de noviembre, antes de los cambios** (el resultado actual está en la sección 8): ✓ receta correcta · ≈ receta parecida · ✗ nada útil o equivocado.
 
 | # | Frase escrita | Qué respondió el asistente | Resultado |
 |---|---|---|---|

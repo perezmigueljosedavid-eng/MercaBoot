@@ -58,6 +58,19 @@ Por ejemplo, si una receta necesita pollo, tortillas y quesillo, la aplicación 
 También se contempla que la IA pueda recomendar establecimientos que ya tengan comida preparada relacionada con lo que el usuario está buscando.
 
 
+## 🚀 Versión 2 («Mercaboot 2»)
+
+Después de la exposición se armó la **versión 2** (rama `version-2`), que se instala como otra app y no reemplaza a la versión final registrada. Agrega:
+
+* Herramientas para **tiendas con muchos productos**: catálogo listo para palomear, precios de hoy, importar la lista desde Excel o Google Sheets o desde una foto, escáner de códigos de barras y horario que abre y cierra el negocio solo.
+* **Compartir el negocio** con enlace, código QR y cartel para imprimir.
+* **Pagos**: efectivo, transferencia o link de tarjeta del propio negocio (Mercaboot no cobra ni mueve dinero).
+* **Boti con más funciones**: arma «mi mandado», dice qué tiendas están abiertas y avisa cuando llega un producto.
+* **Avisos al teléfono** y **recetas con IA** para los platillos que no estén en el recetario (las dos se activan con cuentas del autor; vienen listas y dormidas).
+* **Reportar y bloquear**, **eliminar mi cuenta**, pantalla de error con reintento y pantalla «Acerca de».
+
+Detalle y estado de cada punto: [`docs/HOJA-DE-RUTA-VERSION-2.md`](docs/HOJA-DE-RUTA-VERSION-2.md). Para instalarla y activarla: [`docs/GUIA-DE-ACTIVACION.md`](docs/GUIA-DE-ACTIVACION.md) y [`LEEME.md`](LEEME.md).
+
 ## ©️ Autoría y derechos de autor
 
 **Mercaboot** (aplicación, código, diseño de la interfaz, base de datos, personaje «Boti», logotipo, título, sonidos, textos y documentación) es obra de **José David Pérez Miguel** (autor principal) e **Izebel Altamirano Carreño** (segunda autora).
