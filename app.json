@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "com.mercaboot.v2",
-      "versionCode": 5,
+      "versionCode": 6,
       "adaptiveIcon": {
         "backgroundColor": "#1F7A4D",
         "foregroundImage": "./assets/adaptive-icon.png"
