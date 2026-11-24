@@ -364,13 +364,14 @@ revoke all on function public.notif_preparar(uuid, text, uuid, timestamptz) from
 grant execute on function public.notif_preparar(uuid, text, uuid, timestamptz) to service_role;
 
 revoke all on function public.registrar_dispositivo(text, text), public.quitar_dispositivo(text),
-  public.guardar_preferencias_notificacion(boolean, boolean, boolean, boolean) from public, anon;
+  public.guardar_preferencias_notificacion(boolean, boolean, boolean, boolean) from public, anon, authenticated;
 grant execute on function public.registrar_dispositivo(text, text) to authenticated;
 grant execute on function public.quitar_dispositivo(text) to authenticated;
 grant execute on function public.guardar_preferencias_notificacion(boolean, boolean, boolean, boolean) to authenticated;
 
+-- (Las de ayuda, _texto_simple y _alerta_coincide, quedan cerradas para la app; solo se abren las dos que usa la persona.)
 revoke all on function public._texto_simple(text), public._alerta_coincide(text, text),
-  public.crear_alerta_producto(text), public.quitar_alerta_producto(text) from public, anon;
+  public.crear_alerta_producto(text), public.quitar_alerta_producto(text) from public, anon, authenticated;
 grant execute on function public.crear_alerta_producto(text) to authenticated;
 grant execute on function public.quitar_alerta_producto(text) to authenticated;
 

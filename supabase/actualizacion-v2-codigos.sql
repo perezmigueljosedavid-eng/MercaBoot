@@ -87,8 +87,9 @@ begin
   return null;
 end $$;
 
+-- Primero se cierra todo (también a «authenticated») y después se abre solo lo que usa la app; la función de ayuda queda cerrada.
 revoke all on function public._linea_limpia(text, integer), public.codigo_barras_buscar(text),
-  public.codigo_barras_guardar(text, text, text, text, text) from public, anon;
+  public.codigo_barras_guardar(text, text, text, text, text) from public, anon, authenticated;
 grant execute on function public.codigo_barras_buscar(text) to authenticated;
 grant execute on function public.codigo_barras_guardar(text, text, text, text, text) to authenticated;
 

@@ -284,9 +284,11 @@ create or replace trigger bloqueo_en_conversaciones before insert on public.conv
 create or replace trigger bloqueo_en_pedidos before insert on public.pedidos
   for each row execute function public._bloqueo_en_pedidos();
 
-revoke all on function public._bloqueo_entre(uuid, uuid), public.bloquear_usuario(uuid), public.desbloquear_usuario(uuid),
-  public.mis_bloqueos(), public.reportar(text, text, text, text), public._bloqueo_en_mensajes(),
-  public._bloqueo_en_conversaciones(), public._bloqueo_en_pedidos() from public, anon;
+-- Primero se cierra todo (también a «authenticated»: en Supabase las funciones nuevas nacen abiertas para ese rol) y después se abre
+-- solo lo que usa la app. Las funciones de ayuda y las de los disparadores quedan cerradas para la app.
+revoke all on function public._linea_limpia(text, integer), public._bloqueo_entre(uuid, uuid), public.bloquear_usuario(uuid),
+  public.desbloquear_usuario(uuid), public.mis_bloqueos(), public.reportar(text, text, text, text), public._bloqueo_en_mensajes(),
+  public._bloqueo_en_conversaciones(), public._bloqueo_en_pedidos() from public, anon, authenticated;
 grant execute on function public.bloquear_usuario(uuid), public.desbloquear_usuario(uuid), public.mis_bloqueos(),
   public.reportar(text, text, text, text) to authenticated;
 
@@ -381,8 +383,9 @@ begin
   return null;
 end $$;
 
+-- Primero se cierra todo (también a «authenticated») y después se abre solo lo que usa la app; la función de ayuda queda cerrada.
 revoke all on function public._linea_limpia(text, integer), public.codigo_barras_buscar(text),
-  public.codigo_barras_guardar(text, text, text, text, text) from public, anon;
+  public.codigo_barras_guardar(text, text, text, text, text) from public, anon, authenticated;
 grant execute on function public.codigo_barras_buscar(text) to authenticated;
 grant execute on function public.codigo_barras_guardar(text, text, text, text, text) to authenticated;
 
@@ -452,8 +455,9 @@ begin
      limit 10;
 end $$;
 
+-- Primero se cierra todo (también a «authenticated») y después se abre solo lo que usa la app; la función de ayuda queda cerrada.
 revoke all on function public._texto_simple(text), public.registrar_busqueda_sin_resultado(text),
-  public.busquedas_sin_resultado_semana() from public, anon;
+  public.busquedas_sin_resultado_semana() from public, anon, authenticated;
 grant execute on function public.registrar_busqueda_sin_resultado(text) to authenticated;
 grant execute on function public.busquedas_sin_resultado_semana() to authenticated;
 
@@ -825,13 +829,14 @@ revoke all on function public.notif_preparar(uuid, text, uuid, timestamptz) from
 grant execute on function public.notif_preparar(uuid, text, uuid, timestamptz) to service_role;
 
 revoke all on function public.registrar_dispositivo(text, text), public.quitar_dispositivo(text),
-  public.guardar_preferencias_notificacion(boolean, boolean, boolean, boolean) from public, anon;
+  public.guardar_preferencias_notificacion(boolean, boolean, boolean, boolean) from public, anon, authenticated;
 grant execute on function public.registrar_dispositivo(text, text) to authenticated;
 grant execute on function public.quitar_dispositivo(text) to authenticated;
 grant execute on function public.guardar_preferencias_notificacion(boolean, boolean, boolean, boolean) to authenticated;
 
+-- (Las de ayuda, _texto_simple y _alerta_coincide, quedan cerradas para la app; solo se abren las dos que usa la persona.)
 revoke all on function public._texto_simple(text), public._alerta_coincide(text, text),
-  public.crear_alerta_producto(text), public.quitar_alerta_producto(text) from public, anon;
+  public.crear_alerta_producto(text), public.quitar_alerta_producto(text) from public, anon, authenticated;
 grant execute on function public.crear_alerta_producto(text) to authenticated;
 grant execute on function public.quitar_alerta_producto(text) to authenticated;
 
@@ -951,8 +956,9 @@ language sql stable security definer set search_path = public as $$
      and o.estado in ('aceptado', 'listo') and o.pago_estado <> 'confirmado'
 $$;
 
+-- Primero se cierra todo (también a «authenticated») y después se abre solo lo que usa la app; el disparador queda cerrado.
 revoke all on function public._sincronizar_tarjeta(), public.link_pago_pedido(uuid), public.poner_link_pedido(uuid, text), public.mi_link_pedido(uuid)
-  from public, anon;
+  from public, anon, authenticated;
 grant execute on function public.link_pago_pedido(uuid), public.poner_link_pedido(uuid, text), public.mi_link_pedido(uuid) to authenticated;
 
 -- ═════════════════════════ Parte 6 de 6 · Eliminar mi cuenta ═════════════════════════
@@ -1029,7 +1035,7 @@ begin
   return null;
 end $$;
 
-revoke all on function public.borrar_mi_cuenta(text) from public, anon;
+revoke all on function public.borrar_mi_cuenta(text) from public, anon, authenticated;
 grant execute on function public.borrar_mi_cuenta(text) to authenticated;
 
 -- ═════════════════════════ Fin ═════════════════════════

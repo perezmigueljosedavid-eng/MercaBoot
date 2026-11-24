@@ -62,8 +62,9 @@ begin
      limit 10;
 end $$;
 
+-- Primero se cierra todo (también a «authenticated») y después se abre solo lo que usa la app; la función de ayuda queda cerrada.
 revoke all on function public._texto_simple(text), public.registrar_busqueda_sin_resultado(text),
-  public.busquedas_sin_resultado_semana() from public, anon;
+  public.busquedas_sin_resultado_semana() from public, anon, authenticated;
 grant execute on function public.registrar_busqueda_sin_resultado(text) to authenticated;
 grant execute on function public.busquedas_sin_resultado_semana() to authenticated;
 

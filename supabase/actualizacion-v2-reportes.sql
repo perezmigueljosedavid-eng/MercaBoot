@@ -256,9 +256,11 @@ create or replace trigger bloqueo_en_conversaciones before insert on public.conv
 create or replace trigger bloqueo_en_pedidos before insert on public.pedidos
   for each row execute function public._bloqueo_en_pedidos();
 
-revoke all on function public._bloqueo_entre(uuid, uuid), public.bloquear_usuario(uuid), public.desbloquear_usuario(uuid),
-  public.mis_bloqueos(), public.reportar(text, text, text, text), public._bloqueo_en_mensajes(),
-  public._bloqueo_en_conversaciones(), public._bloqueo_en_pedidos() from public, anon;
+-- Primero se cierra todo (también a «authenticated»: en Supabase las funciones nuevas nacen abiertas para ese rol) y después se abre
+-- solo lo que usa la app. Las funciones de ayuda y las de los disparadores quedan cerradas para la app.
+revoke all on function public._linea_limpia(text, integer), public._bloqueo_entre(uuid, uuid), public.bloquear_usuario(uuid),
+  public.desbloquear_usuario(uuid), public.mis_bloqueos(), public.reportar(text, text, text, text), public._bloqueo_en_mensajes(),
+  public._bloqueo_en_conversaciones(), public._bloqueo_en_pedidos() from public, anon, authenticated;
 grant execute on function public.bloquear_usuario(uuid), public.desbloquear_usuario(uuid), public.mis_bloqueos(),
   public.reportar(text, text, text, text) to authenticated;
 

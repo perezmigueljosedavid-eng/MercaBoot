@@ -112,8 +112,9 @@ language sql stable security definer set search_path = public as $$
      and o.estado in ('aceptado', 'listo') and o.pago_estado <> 'confirmado'
 $$;
 
+-- Primero se cierra todo (también a «authenticated») y después se abre solo lo que usa la app; el disparador queda cerrado.
 revoke all on function public._sincronizar_tarjeta(), public.link_pago_pedido(uuid), public.poner_link_pedido(uuid, text), public.mi_link_pedido(uuid)
-  from public, anon;
+  from public, anon, authenticated;
 grant execute on function public.link_pago_pedido(uuid), public.poner_link_pedido(uuid, text), public.mi_link_pedido(uuid) to authenticated;
 
 notify pgrst, 'reload schema';

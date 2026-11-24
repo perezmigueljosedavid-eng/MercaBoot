@@ -70,7 +70,7 @@ begin
   return null;
 end $$;
 
-revoke all on function public.borrar_mi_cuenta(text) from public, anon;
+revoke all on function public.borrar_mi_cuenta(text) from public, anon, authenticated;
 grant execute on function public.borrar_mi_cuenta(text) to authenticated;
 
 notify pgrst, 'reload schema';
