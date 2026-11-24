@@ -243,7 +243,7 @@ Eventos que anota: `cuenta_creada`, `cuenta_eliminada`, `negocio_creado`, `negoc
 - **Crear la cuenta se queda esperando o pide confirmar el correo**: sigue encendido «Confirm email» (Paso 1, punto 3).
 - **«Invalid API key»** o no carga nada: la llave se copió incompleta o es de otro proyecto.
 - **Los cambios no llegan al instante**: confirma que `supabase/esquema.sql` se ejecutó completo. Aun así, la app se actualiza sola cada pocos segundos como respaldo.
-- **Una función nueva dice «todavía no está disponible»**: falta ejecutar `supabase/actualizacion-v2-todo.sql` (Paso 1).
+- **Una función nueva dice «todavía no está disponible»**: falta ejecutar `supabase/actualizacion-v2-todo.sql` (Paso 1). En el proyecto de Supabase del autor ya se aplicó el 23 de noviembre de 2026; solo hace falta en un proyecto nuevo.
 - **La cámara no abre o dice que no tiene permiso**: Ajustes del teléfono → Apps → Mercaboot 2 → Permisos → Cámara → permitir.
 - **El proyecto de Supabase «está pausado»**: el plan gratis pausa los proyectos que pasan 7 días sin usarse. Entra a supabase.com, abre el proyecto y toca **Restore project** (conviene hacerlo antes de una demostración).
 - **La página para iPhone da «404»**: falta prender GitHub Pages (Paso 2: **Settings → Pages → Branch: `gh-pages`**) o aún no termina de publicarse (espera 1–2 minutos).

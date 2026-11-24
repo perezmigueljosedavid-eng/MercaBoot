@@ -6,7 +6,7 @@
 | **Autor principal** | José David Pérez Miguel |
 | **Segunda autora** | Izebel Altamirano Carreño |
 | **Fecha** | 23 de noviembre de 2026 (primera versión de este documento: 21 de noviembre) |
-| **Estado** | **Entregada.** Las siete fases y las siete mejoras pequeñas están programadas y probadas. Lo que depende de cuentas del autor (IA, Firebase) queda **dormido** hasta activarlo con la [guía de activación](GUIA-DE-ACTIVACION.md). |
+| **Estado** | **Entregada.** Las siete fases y las siete mejoras pequeñas están programadas y probadas. Lo que depende de cuentas del autor (IA, Firebase) queda **dormido** hasta activarlo con la [guía de activación](GUIA-DE-ACTIVACION.md). La actualización de la base de datos y las funciones del servidor **ya están aplicadas** en la base real (23-nov-2026). |
 | **App** | «Mercaboot 2» · paquete `com.mercaboot.v2` · versión 5.0.0 (código 7) |
 | **Rama** | `version-2` (sale de `version-voz`). La versión final registrada (`version-final`) y «Mercaboot Voz» (`version-voz`) siguen intactas. |
 
@@ -183,7 +183,7 @@ Son cosas que un ingeniero de software agregaría para que la app sea segura y f
 
 Además, las 37 frases de platillos del diagnóstico (sección 2.1), la revisión de tipos (`npx tsc --noEmit`) y de estilo (`npx expo lint`), y la prueba de que el archivo SQL único
 da exactamente el mismo resultado que los archivos por separado, sobre una copia de la base de datos real, aplicado dos veces seguidas.
-Las pruebas de base de datos se corrieron en una copia local (Postgres), **nunca** en la base real.
+Las pruebas de base de datos se corrieron en una copia local (Postgres), **nunca** en la base real. Al aplicar la actualización a la base real solo se hicieron **lecturas** para comprobar que quedó igual a la copia probada (funciones, permisos, tablas y datos) y se revisó el asesor de seguridad de Supabase; no se corrió ninguna prueba que escriba datos en la base real.
 
 **Lo que NO se pudo probar sin un celular real** (hay que hacerlo con la lista de la [guía, sección 6](GUIA-DE-ACTIVACION.md)): abrir la cámara de verdad (escáner de códigos, lector de QR, foto de la lista), los avisos al teléfono de punta a punta,
 el cartel en PDF en un celular, el pago con un link real y la apariencia de las pantallas nuevas en distintos tamaños de teléfono.
@@ -201,7 +201,7 @@ el cartel en PDF en un celular, el pago con un link real y la apariencia de las 
 | Avisos en iPhone | Necesita una cuenta de pago de Apple | Cuando haya cuenta |
 | Cobro con tarjeta integrado (camino B) | Obligaciones legales y fiscales, más trabajo | Solo si hay negocios reales que lo pidan |
 | Página web de la versión 2 | Hoy la web (iPhone, enlaces y QR) es la de la versión 4.3. Publicar la nueva reemplazaría la que usa la versión registrada | Decisión del autor |
-| Pruebas dentro del repositorio | Los programas de prueba de la sección 5 se corrieron desde un entorno de trabajo aparte; **no están en el repositorio**, así que hoy no se pueden volver a correr desde GitHub | Pasarlos a una carpeta `pruebas/` con un comando `npm test` y correrlos en cada subida |
+| Pruebas dentro del repositorio | Los programas de prueba de la sección 5 se corrieron desde un entorno de trabajo aparte; **no están en el repositorio**, así que hoy no se pueden volver a correr desde GitHub | Pasarlos a una carpeta `pruebas/` con un comando `npm test` y correrlos en cada subida. Ojo: la prueba de avisos depende de la hora (de 10 de la noche a 7 de la mañana entra «No molestar» y el aviso no sale), así que al pasarla hay que fijarle una hora de día |
 | Panel para revisar reportes | Hoy se revisan en Supabase (tabla `reportes`) | Hacerlo si crece el uso |
 | `LICENSE` | Dice «versión final 4.3» | Decidir con INDAUTOR o un abogado si se registra la versión 2 (guía, sección 8) |
 
@@ -212,16 +212,19 @@ el cartel en PDF en un celular, el pago con un link real y la apariencia de las 
 | `esquema.sql`, `actualizacion-2-1.sql`, `actualizacion-final.sql`, `actualizacion-seguridad.sql`, `actualizacion-detalle-productos.sql` | La versión final registrada | Sí |
 | `actualizacion-receta-ia.sql` | Caché y límites de la IA de recetas | Sí |
 | `actualizacion-v2-productos.sql` | Productos por lote, horario automático (`pg_cron`), tope de 1,500 | Sí |
-| `actualizacion-v2-todo.sql` (junta las 6 partes de abajo) | Reportar y bloquear · códigos de barras · lo que buscan y no encuentran · avisos al teléfono y alertas · pagos con link · eliminar mi cuenta | **Pendiente: falta aplicarlo** (guía, paso 1) |
+| `actualizacion-v2-todo.sql` (junta las 6 partes de abajo) | Reportar y bloquear · códigos de barras · lo que buscan y no encuentran · avisos al teléfono y alertas · pagos con link · eliminar mi cuenta | **Sí.** Aplicado el 23-nov-2026 como una sola migración (`v2_reportes_codigos_boti_notificaciones_pagos_cuenta`) |
 
 | Función del servidor | Qué hace | ¿Publicada? |
 |---|---|---|
 | `receta-ia` | Recetas con IA | Sí (dormida: falta `ANTHROPIC_API_KEY`) |
-| `foto-a-productos` | Lista de precios desde una foto | **Pendiente: falta publicarla** (guía, paso 1) |
-| `enviar-notificacion` | Avisos al teléfono | **Pendiente: falta publicarla** (guía, paso 1); además necesita `FCM_SERVICE_ACCOUNT` |
+| `foto-a-productos` | Lista de precios desde una foto | Sí (dormida: falta `ANTHROPIC_API_KEY`) |
+| `enviar-notificacion` | Avisos al teléfono | Sí (dormida: falta `FCM_SERVICE_ACCOUNT`) |
 
-Hasta que se aplique el archivo único, las funciones nuevas que dependen de él dicen «todavía no está disponible» y todo lo demás funciona.
-La APK vigente (código 7) se armó con el commit `6e509d3`; los cambios posteriores solo agregan documentación y archivos de la base de datos, no código de la app.
+**Cómo se aplicó (23 de noviembre de 2026).** El archivo único entró como **una sola migración**: o entraba todo o no entraba nada. Después se comprobó, solo leyendo, que la base real quedó igual a la copia local probada: las 26 funciones nuevas con las mismas definiciones y los mismos permisos, 9 tablas nuevas (26 tablas y 79 funciones en total) y los datos que ya había, intactos. El asesor de seguridad de Supabase solo marca avisos esperados: las funciones que la app usa a propósito con sesión iniciada (más 3 públicas para el registro que ya existían), un ajuste opcional que sigue pendiente en `lista_de_textos_cortos` y la protección contra contraseñas filtradas, que solo ofrece el plan de pago.
+
+**Un ajuste de seguridad antes de aplicarla.** Al probar la copia local con los mismos permisos por omisión que usa Supabase se vio que las funciones nuevas nacen abiertas para cualquiera con sesión iniciada, incluso las internas (las de ayuda y las de los disparadores). Las seis partes y el archivo único se corrigieron para cerrarlas y abrir solo las que usa la app (cambio guardado en el commit `adda722`).
+
+La APK vigente (código 7) se armó con el commit `6e509d3`; los cambios posteriores solo agregan documentación y archivos de la base de datos, no código de la app, así que **no hace falta armar otra APK**.
 
 ## 8. Lo que no se agregará por ahora
 
@@ -235,7 +238,7 @@ La APK vigente (código 7) se armó con el commit `6e509d3`; los cambios posteri
 
 1. **Ramas.** Todo el trabajo nuevo va en `version-2`. `version-final` (la del registro de derechos) y `version-voz` no se tocaron.
 2. **App aparte.** «Mercaboot 2» (`com.mercaboot.v2`) se instala junto a las otras y no pisa sus publicaciones (`final-apk` y `voz-apk`); la suya es `v2-apk`.
-3. **Base de datos compartida.** Solo se agregan tablas, columnas y funciones. No se borró ni se cambió nada de lo que existe.
+3. **Base de datos compartida.** Solo se agregan tablas, columnas y funciones. No se borró ni se cambió nada de lo que existe (tampoco al aplicarla en la base real).
 4. **Secretos.** Ninguna llave secreta está en el repositorio, en la app ni en el chat (llave de servicio de Supabase, llaves de IA, llave privada de Firebase). Van como secretos de Supabase o de GitHub.
 5. **No saturar.** Las funciones nuevas viven dentro de pantallas que ya existían (Productos, Perfil, el chat, el inicio); las pantallas nuevas son las de cada herramienta.
 6. **Autoría.** Todos los cambios de la versión 2 se guardaron con el nombre del autor principal, José David Pérez Miguel. Los cambios anteriores, de la versión final y de «Mercaboot Voz», siguen como estaban (ver la guía, sección 8).
@@ -284,3 +287,4 @@ Por eso la tarjeta solo conviene en pedidos grandes y la transferencia y el efec
 - **2026-11-21.** Primera versión: se ordenan los temas pedidos tras la exposición, se agrega el diagnóstico de «Ideas para cocinar» y las mejoras pequeñas recomendadas. Sin cambios en el código de la app.
 - **2026-11-23.** Entrega de la versión 2: el documento pasa de propuesta a estado real. Cada fase y mejora se marca como hecha, dormida, parcial o pendiente, se agregan las mejoras de ingeniería, las pruebas, el estado de la base de datos y los pendientes. La guía para activar lo que depende de cuentas del autor está en [GUIA-DE-ACTIVACION.md](GUIA-DE-ACTIVACION.md).
 - **2026-11-23 (noche).** Se encontró y corrigió que la primera APK no traía el permiso de la cámara (ver la sección 5). Cambios: `app.json` (código 7), revisión automática de permisos en cada compilación, texto de la Ayuda corregido («¿Qué se te antoja?» → «Pedir ideas») y este documento al día. Se quitó de pendientes el texto de la Ayuda.
+- **2026-11-23 (más tarde, de noche).** Se aplicó la actualización de la base de datos a la base real y se publicaron las funciones `enviar-notificacion` y `foto-a-productos`. Antes se encontró y corrigió que las funciones nuevas nacían abiertas para quien tiene sesión iniciada (sección 7). Este documento y la [guía de activación](GUIA-DE-ACTIVACION.md) pasan de «pendiente» a «aplicado». Cambios en archivos: las seis partes de `supabase/actualizacion-v2-*.sql`, `actualizacion-v2-todo.sql` y estos documentos; el código de la app no cambia.

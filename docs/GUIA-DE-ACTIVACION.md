@@ -8,6 +8,7 @@
 | **Fecha** | 23 de noviembre de 2026 |
 | **Para quién** | Para el autor. Se explica con palabras sencillas y con ejemplos; no hace falta saber programar. |
 | **Rama** | `version-2` |
+| **Estado** | La actualización de la base de datos y las funciones del servidor **ya están aplicadas** en tu Supabase (23 de noviembre de 2026). Lo que falta depende de tus cuentas: la llave de la IA (paso 3) y Firebase (paso 4). |
 
 © 2026 José David Pérez Miguel. Todos los derechos reservados (ver [LICENSE](../LICENSE)).
 
@@ -29,15 +30,21 @@ Cuando pongas lo que falta, **despiertan solas**, sin volver a programar nada.
 | Recetario grande y «Ideas para cocinar» que entiende cualquier platillo (177 recetas, sin internet) | Sí | Nada | — |
 | Tiendas con muchos productos: Catálogo Mercaboot, Precios de hoy, horario automático | Sí | Nada (esa parte de la base de datos ya está aplicada) | — |
 | Importar productos desde Excel / Google Sheets, escáner de códigos de barras (consulta Open Food Facts), compartir con enlace y QR, aviso con un toque, Boti con «mi mandado» y «¿qué tiendas están abiertas?» | Sí | Nada | — |
-| Reportar y bloquear, «avísame cuando haya…», pagos con link de tarjeta, eliminar mi cuenta y que los códigos de barras se compartan entre comerciantes | **Casi**: están en la APK, pero necesitan la **actualización de la base de datos** | Aplicar un archivo SQL (una sola vez) | 1 |
+| Reportar y bloquear, «avísame cuando haya…», pagos con link de tarjeta, eliminar mi cuenta y que los códigos de barras se compartan entre comerciantes | Sí | Nada (la actualización de la base de datos ya está aplicada) | 1 (hecho) |
 | Recetas nuevas con IA (platillos que no están en el recetario) | Dormida | Llave de la IA | 3 |
-| Importar la lista de precios **desde una foto** | Dormida | Llave de la IA + la función del servidor | 1 y 3 |
-| Avisos al teléfono (mensajes, pedidos, avisos de tiendas favoritas, «ya hay aguacate») | Dormida | Proyecto de Firebase (gratis) | 4 |
+| Importar la lista de precios **desde una foto** | Dormida | Llave de la IA (la función del servidor ya está publicada) | 3 |
+| Avisos al teléfono (mensajes, pedidos, avisos de tiendas favoritas, «ya hay aguacate») | Dormida | Proyecto de Firebase (gratis); la función del servidor ya está publicada | 4 |
 | Pagar con tarjeta | Sí, **cada negocio** pega el link de su propio proveedor | Nada de tu parte | 5 |
 
-**Orden recomendado:** 1 → 2 → probar → 3 → 4. La IA y los avisos son independientes: puedes activar solo una.
+**Orden recomendado:** el paso 1 ya está hecho; sigue 2 → probar → 3 → 4. La IA y los avisos son independientes: puedes activar solo una.
 
-## 1. Actualizar la base de datos (una sola vez)
+## 1. Actualizar la base de datos (ya está hecho)
+
+> **Estado: ya está aplicada (23 de noviembre de 2026, hora de México).** Se aplicó en tu proyecto de Supabase **MercaBoot** como una sola migración, llamada
+> `v2_reportes_codigos_boti_notificaciones_pagos_cuenta`, y se publicaron las dos funciones del servidor que faltaban (`enviar-notificacion` y `foto-a-productos`; `receta-ia` ya estaba).
+> Después se comprobó, solo leyendo, que la base real quedó **igual** a la copia que se había probado: las mismas funciones con los mismos permisos y tus datos intactos
+> (ahora son 26 tablas y 79 funciones; las nuevas son 9 tablas y 26 funciones). No tienes que hacer nada en este paso; queda como referencia por si algún día hay que repetirlo
+> (por ejemplo, en un proyecto nuevo de Supabase).
 
 **Qué es.** La base de datos de Supabase es donde viven las cuentas, los productos y los chats. La versión 2 necesita **tablas y funciones nuevas** (para reportes y
 bloqueos, códigos de barras, avisos al teléfono, links de pago, eliminar cuenta…). Todas vienen juntas en un solo archivo:
@@ -49,9 +56,11 @@ bloqueos, códigos de barras, avisos al teléfono, links de pago, eliminar cuent
 - Por eso la versión final registrada y «Mercaboot Voz» **siguen funcionando igual** con la misma base de datos.
 - Se puede correr **más de una vez** sin problema, y funciona como **una sola operación**: si algo fallara, no se aplica nada.
 - Se probó contra una copia local de la base de datos real (comprobaciones de seguridad, permisos y límites) antes de entregarlo.
-- Aun así, cualquier cambio en la base de datos real es serio: las copias de seguridad diarias son del plan Pro de Supabase, no del gratis. Por eso se pide permiso antes.
+- Las funciones nuevas quedan **cerradas de entrada**: en Supabase las funciones nuevas nacen abiertas para cualquiera que tenga sesión iniciada, así que la actualización las cierra todas
+  y abre solo las que la app necesita (las de ayuda y las de los disparadores quedan cerradas). Esto se descubrió probando la copia local con esos mismos permisos por omisión, antes de tocar la base real.
+- Aun así, cualquier cambio en la base de datos real es serio: las copias de seguridad diarias son del plan Pro de Supabase, no del gratis. Por eso se pidió tu permiso antes de aplicarla.
 
-**Dos formas de hacerlo (elige una):**
+**Si algún día hay que repetirlo, hay dos formas (elige una):**
 
 ### Opción A · Que lo aplique Claude (recomendada)
 
@@ -70,8 +79,8 @@ Tu proyecto de Supabase está conectado a Claude. Dile «aplica la actualizació
 5. Las funciones del servidor (`enviar-notificacion` y `foto-a-productos`) no se publican desde aquí; con esta opción hay que pedirle a Claude que las publique, o usar la terminal con
    `npx supabase functions deploy enviar-notificacion --project-ref osvcnthsulwjyisfhsny` (y lo mismo con `foto-a-productos`, después de `npx supabase login`).
 
-**Cómo saber que salió bien.** En Supabase → **Table Editor** aparecen las tablas `bloqueos`, `reportes`, `codigos_barras`, `busquedas_sin_resultado`, `dispositivos`,
-`alertas_producto` y `pedido_links`. En la app, las pantallas que decían «todavía no está disponible» (por ejemplo, **Perfil → Personas bloqueadas**) ya funcionan.
+**Cómo saber que salió bien.** En Supabase → **Table Editor** aparecen las 9 tablas nuevas: `alertas_producto`, `bloqueos`, `busquedas_sin_resultado`, `codigos_barras`, `dispositivos`,
+`notificaciones_enviadas`, `pedido_links`, `preferencias_notificacion` y `reportes`. En la app, las pantallas que decían «todavía no está disponible» (por ejemplo, **Perfil → Personas bloqueadas**) ya funcionan.
 
 **Si da error.** Copia el mensaje completo y mándamelo (sin llaves). Como todo es una sola operación, no queda nada a medias y se puede volver a intentar.
 
@@ -112,7 +121,7 @@ Las recetas repetidas no cuestan: se guardan. Son estimaciones (dependen de lo q
 4. **Crea la llave** en [API keys](https://platform.claude.com/settings/keys) → **Create key**. Ponle de nombre «mercaboot». La consola muestra la llave (empieza con `sk-ant-`) **una sola vez**: cópiala.
 5. **Pégala en Supabase**: tu proyecto → **Edge Functions → Secrets** ([enlace directo](https://supabase.com/dashboard/project/osvcnthsulwjyisfhsny/functions/secrets)) →
    Nombre: `ANTHROPIC_API_KEY` · Valor: la llave → **Save**. No hace falta volver a publicar nada: queda lista al instante.
-6. **Prueba** (las recetas con IA ya quedan listas; para la foto de la lista hay que haber hecho antes el paso 1):
+6. **Prueba** (las dos funciones ya están publicadas en Supabase; solo faltaba la llave):
    - En un celular como **cliente**: en el **Inicio**, la tarjeta verde **«¿Qué se te antoja?»** (abre la pantalla «Pregúntale a Boti») → escribe un platillo que no esté en el recetario, por ejemplo «capirotada» o «tlayuda con tasajo». Debe salir una receta con la etiqueta «Receta sugerida por IA».
    - En un celular como **comerciante**: **Productos → «Importar mi lista»** → en la parte de **«Desde una foto»** toma o elige la foto de una lista de precios. La app muestra un resumen para revisar **antes** de agregar nada.
 
@@ -155,7 +164,7 @@ Hacen falta **dos archivos distintos** de Firebase. Es fácil confundirlos, por 
 5. **Vuelve a armar la APK** (sección 2): ahora saldrá con avisos al teléfono. Las notas del Release dicen «Avisos al teléfono en este APK: sí». Instálala encima.
 6. En Firebase: **Configuración del proyecto** (el engrane) → pestaña **Cuentas de servicio** → **Generar nueva clave privada** → se descarga un archivo `.json`. **Es secreto: no lo mandes por chat, correo ni GitHub.**
 7. En Supabase: **Edge Functions → Secrets** → Nombre: `FCM_SERVICE_ACCOUNT` · Valor: **todo el contenido** de ese archivo → **Save**. Después borra el archivo de tu computadora o guárdalo en un lugar privado.
-8. Haz el **paso 1** si todavía no lo hiciste (ahí se publica la función `enviar-notificacion` y se crean las tablas de avisos).
+8. El **paso 1** ya está hecho: la función `enviar-notificacion` ya está publicada en tu Supabase y las tablas de avisos ya existen. No tienes que hacer nada aquí.
 9. **Prueba con dos celulares** (no se puede probar con uno solo): uno como cliente y otro como comerciante, los dos con «Mercaboot 2» y los avisos permitidos.
    Manda un mensaje desde uno, con la app **cerrada** en el otro: debe llegar la notificación y, al tocarla, abrir ese chat.
 
@@ -217,7 +226,7 @@ Esto no es asesoría legal; son cosas que conviene resolver con INDAUTOR o un ab
 - **Convenio con Izebel.** El aviso de derechos dice que tú eres el titular y que Izebel es segunda autora. Conviene dejarlo **por escrito y firmado entre los dos** (qué le corresponde a cada quien).
 - **¿Se registra la versión 2?** El registro que tienen es de la **versión final 4.3** (rama `version-final`, que queda intacta). Pregunta si conviene registrar la versión 2 como una obra nueva o derivada. El archivo [`LICENSE`](../LICENSE) todavía dice «versión final 4.3».
 - **Código hecho con ayuda de una herramienta de IA.** Pregunta cómo debe declararse. Es mejor preguntar **antes** de registrar que enterarse después.
-- **Cambios viejos que muestran a «Claude» como autor en GitHub.** Los cambios de la versión 2 están guardados **solo a tu nombre**. Pero el historial anterior (Avance 1, Avance 2, Avance 2.1, versión final, «Mercaboot Voz» y la revisión de seguridad) se hizo antes de que pidieras aparecer como único programador, y en GitHub esos cambios (son 21 en cada rama de las versiones, y 1 en `main`) siguen apareciendo con el autor «Claude» y con una línea de coautoría. La versión 2 comparte ese historial, así que también se ven ahí. **No se cambió nada**, porque reescribir ese historial **cambia los códigos de cada cambio y las etiquetas de la versión registrada** (`version-final`). Antes de decidir, pregunta a quien lleve tu registro si eso afecta. Las opciones están en el chat: dejarlo así, hacer **copias nuevas** de las ramas con tu nombre (sin tocar las originales) o reescribir las originales.
+- **Cambios viejos que muestran a «Claude» como autor en GitHub.** Los cambios de la versión 2 están guardados **solo a tu nombre**. Pero el historial anterior (Avance 1, Avance 2, Avance 2.1, versión final, «Mercaboot Voz» y la revisión de seguridad) se hizo antes de que pidieras aparecer como único programador, y en GitHub esos cambios (son 21 en cada rama de las versiones, y 1 en `main`) siguen apareciendo con el autor «Claude» y con una línea de coautoría. La versión 2 comparte ese historial, así que también se ven ahí. **No se cambió nada**, porque reescribir ese historial **cambia los códigos de cada cambio y las etiquetas de la versión registrada** (`version-final`). Antes de decidir, pregunta a quien lleve tu registro si eso afecta. **Decisión del autor (23 de noviembre de 2026): dejarlo así por ahora.** Si más adelante quieres cambiarlo, las opciones son hacer **copias nuevas** de las ramas con tu nombre (sin tocar las originales) o reescribir las originales (lo más delicado).
 - **Piezas de terceros.** Open Food Facts (datos con licencia ODbL: se da el crédito en **Acerca de**), la fuente Plus Jakarta Sans (OFL), Expo y las demás: ver [`THIRD-PARTY-LICENSES.md`](../THIRD-PARTY-LICENSES.md).
 
 **Si algún día la subes a Google Play:** pide que la app permita **eliminar la cuenta desde dentro** (ya lo tiene), una página web donde se pueda pedir ese borrado, un aviso de privacidad con dirección web,
@@ -227,7 +236,7 @@ reportar y bloquear en lo que escribe la gente (ya lo tiene) y un archivo de pub
 
 | Qué ves | Qué significa | Qué hacer |
 |---|---|---|
-| «Todavía no está disponible» en una función nueva | Falta la actualización de la base de datos | Paso 1 |
+| «Todavía no está disponible» en una función nueva | En tu proyecto ya no debería pasar (la actualización de la base de datos está aplicada). Si pasa, la app apunta a otro proyecto de Supabase o a uno nuevo que no tiene la actualización | Revisar `src/config.ts` y, en un proyecto nuevo, repetir el paso 1 |
 | «La IA todavía no está activada» | No hay `ANTHROPIC_API_KEY` en Supabase | Paso 3 |
 | «Vas muy rápido…» o «límite» | Se llegó a un tope de uso (por persona o diario) | Esperar o subir el tope (paso 3) |
 | La IA deja de responder y la consola habla de saldo o de un límite | Se acabó el saldo o se llegó al tope mensual | Cargar saldo o subir el tope en la consola |
