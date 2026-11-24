@@ -1,0 +1,9 @@
+resultado: success
+avance: version-2
+avisos-al-telefono: false
+corrida: 14
+commit: 6e509d3e8c42a91ea859147111e8b23f32d323a3
+rama: version-2
+fecha: 2026-11-24T04:09:14Z
+config-lista: true
+pasos: nube=success instalar=success iconos=success tipos=success prebuild=success permisos-proyecto=success gradle=success apk=success permisos-apk=success release=success
