@@ -91,6 +91,12 @@ jobs:
         id: prebuild
         run: npx expo prebuild --platform android --no-install 2>&1 | tee -a build.log
 
+      # Si un plugin bloquea la cámara (o otro permiso que la app necesita), la corrida se detiene AQUÍ y no después de 15 minutos de
+      # compilación. Así pasó en la primera compilación: «cameraPermission: false» de expo-image-picker le quitó la cámara a todo el APK.
+      - name: Revisar los permisos del proyecto (que no falte la cámara)
+        id: permisos-proyecto
+        run: node scripts/revisar-permisos.cjs android/app/src/main/AndroidManifest.xml 2>&1 | tee -a build.log
+
       - name: Dar más memoria a Gradle
         run: sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g/' android/gradle.properties
 
@@ -114,6 +120,15 @@ jobs:
             echo "== aapt2 =="
             "$BT/aapt2" dump badging Mercaboot-v2.apk | grep -E "^package|sdkVersion|targetSdkVersion|uses-permission|application-label:|native-code" || true
           } 2>&1 | tee info-apk.txt
+
+      # Última puerta antes de publicar: el APK ya armado tiene que traer los permisos que la app necesita (cámara, avisos, ubicación…).
+      # Si falta alguno, esta corrida falla y NO se publica nada en Releases (el APK anterior sigue ahí).
+      - name: Comprobar los permisos del APK (si falta alguno, no se publica)
+        id: permisos-apk
+        run: |
+          BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          "$BT/aapt2" dump permissions Mercaboot-v2.apk > permisos-apk.txt
+          node scripts/revisar-permisos.cjs --apk permisos-apk.txt 2>&1 | tee -a build.log
 
       - uses: actions/upload-artifact@v4
         with:
@@ -143,8 +158,10 @@ jobs:
           P_ICONOS: ${{ steps.iconos.outcome }}
           P_TIPOS: ${{ steps.tipos.outcome }}
           P_PREBUILD: ${{ steps.prebuild.outcome }}
+          P_PERMISOS_PROYECTO: ${{ steps.permisos-proyecto.outcome }}
           P_GRADLE: ${{ steps.gradle.outcome }}
           P_APK: ${{ steps.apk.outcome }}
+          P_PERMISOS_APK: ${{ steps.permisos-apk.outcome }}
           P_RELEASE: ${{ steps.release.outcome }}
           CON_FIREBASE: ${{ steps.firebase.outputs.con }}
         run: |
@@ -158,9 +175,10 @@ jobs:
             echo "rama: ${{ github.ref_name }}"
             date -u +"fecha: %Y-%m-%dT%H:%M:%SZ"
             echo "config-lista: ${CONFIG_LISTA:-no}"
-            echo "pasos: nube=$P_NUBE instalar=$P_INSTALAR iconos=$P_ICONOS tipos=$P_TIPOS prebuild=$P_PREBUILD gradle=$P_GRADLE apk=$P_APK release=$P_RELEASE"
+            echo "pasos: nube=$P_NUBE instalar=$P_INSTALAR iconos=$P_ICONOS tipos=$P_TIPOS prebuild=$P_PREBUILD permisos-proyecto=$P_PERMISOS_PROYECTO gradle=$P_GRADLE apk=$P_APK permisos-apk=$P_PERMISOS_APK release=$P_RELEASE"
           } > "$d/estado.txt"
           if [ -f info-apk.txt ]; then cp info-apk.txt "$d/info-apk.txt"; fi
+          if [ -f permisos-apk.txt ]; then cp permisos-apk.txt "$d/permisos-apk.txt"; fi
           if [ -f build.log ]; then
             tail -n 300 build.log > "$d/build-cola.txt"
             grep -n -B2 -A14 -E "FAILURE: Build failed|What went wrong|^e: |error TS|npm error|ERR!|Error:" build.log | head -n 400 > "$d/errores.txt" || true

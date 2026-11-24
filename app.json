@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "com.mercaboot.v2",
-      "versionCode": 6,
+      "versionCode": 7,
       "adaptiveIcon": {
         "backgroundColor": "#1F7A4D",
         "foregroundImage": "./assets/adaptive-icon.png"
@@ -44,7 +44,7 @@
         "expo-image-picker",
         {
           "photosPermission": "Mercaboot necesita tus fotos para que puedas elegir el logo de tu negocio, tu foto de perfil o la foto de tu lista de precios.",
-          "cameraPermission": false,
+          "cameraPermission": "Mercaboot usa la cámara solo cuando tú la abres: para leer un código de barras o un QR, o para fotografiar tu lista de precios. Mercaboot no guarda fotos ni video.",
           "microphonePermission": false
         }
       ],
